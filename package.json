@@ -32,7 +32,8 @@
     "dev": "next dev",
     "format": "prettier --write \"**/*.{js,jsx,ts,tsx,json,md,css}\"",
     "format:check": "prettier --check \"**/*.{js,jsx,ts,tsx,json,md,css}\"",
-    "postinstall": "prisma generate || echo 'Prisma not configured'",
+    "preinstall": "npx only-allow npm",
+    "postinstall": "echo 'Installation completed successfully'",
     "lint": "next lint --fix",
     "lint:check": "next lint",
     "pre-commit": "lint-staged",
@@ -132,6 +133,7 @@
     "lucide-react": "^0.454.0",
     "next": "15.2.4",
     "next-themes": "latest",
+    "only-allow": "^1.2.1",
     "path": "latest",
     "react": "^19",
     "react-day-picker": "latest",
@@ -201,6 +203,8 @@
   "packageManager": "npm@10.9.0",
   "engines": {
     "node": ">=18.17.0",
-    "npm": ">=9.0.0"
+    "npm": ">=9.0.0",
+    "pnpm": "please-use-npm",
+    "yarn": "please-use-npm"
   }
 }

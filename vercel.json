@@ -1,4 +1,7 @@
 {
+  "buildCommand": "npm run build",
+  "installCommand": "npm install",
+  "framework": "nextjs",
   "rewrites": [
     {
       "source": "/api/:path*",
@@ -16,5 +19,8 @@
     "app/api/redirect/[slug]/route.ts": {
       "maxDuration": 10
     }
+  },
+  "env": {
+    "NODE_ENV": "production"
   }
 }

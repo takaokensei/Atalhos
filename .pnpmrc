@@ -11,3 +11,4 @@ store-dir=node_modules/.pnpm
 virtual-store-dir=node_modules/.pnpm
 registry=https://registry.npmjs.org/
 prefer-frozen-lockfile=false
+frozen-lockfile=false

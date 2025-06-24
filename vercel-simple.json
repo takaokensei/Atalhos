@@ -1,6 +1,6 @@
 {
   "buildCommand": "pnpm run build",
-  "installCommand": "rm -f pnpm-lock.yaml && corepack enable && corepack prepare pnpm@9.0.6 --activate && pnpm install",
+  "installCommand": "corepack enable && corepack use pnpm@9.0.6 && pnpm install --no-frozen-lockfile",
   "framework": "nextjs",
   "rewrites": [
     {
@@ -22,8 +22,6 @@
   },
   "env": {
     "NODE_ENV": "production",
-    "ENABLE_EXPERIMENTAL_COREPACK": "1",
-    "COREPACK_ENABLE_STRICT": "0",
-    "COREPACK_ENABLE_DOWNLOAD_PROMPT": "0"
+    "ENABLE_EXPERIMENTAL_COREPACK": "1"
   }
 }

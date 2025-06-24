@@ -1,0 +1,12 @@
+# pnpm configuration for version 9.0.6
+auto-install-peers=true
+strict-peer-dependencies=false
+resolution-mode=highest
+hoist-pattern[]=*eslint*
+hoist-pattern[]=*prettier*
+public-hoist-pattern[]=*types*
+shamefully-hoist=false
+side-effects-cache=true
+store-dir=node_modules/.pnpm
+virtual-store-dir=node_modules/.pnpm
+registry=https://registry.npmjs.org/

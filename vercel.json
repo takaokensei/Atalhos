@@ -1,6 +1,6 @@
 {
-  "buildCommand": "npm run build",
-  "installCommand": "npm install --legacy-peer-deps --no-audit",
+  "buildCommand": "pnpm run build",
+  "installCommand": "corepack enable && corepack prepare pnpm@9.0.6 --activate && pnpm install --frozen-lockfile",
   "framework": "nextjs",
   "rewrites": [
     {
@@ -21,6 +21,7 @@
     }
   },
   "env": {
-    "NODE_ENV": "production"
+    "NODE_ENV": "production",
+    "COREPACK_ENABLE_STRICT": "0"
   }
 }

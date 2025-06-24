@@ -32,18 +32,19 @@
     "dev": "next dev",
     "format": "prettier --write \"**/*.{js,jsx,ts,tsx,json,md,css}\"",
     "format:check": "prettier --check \"**/*.{js,jsx,ts,tsx,json,md,css}\"",
+    "preinstall": "npx only-allow pnpm",
     "postinstall": "echo 'Installation completed successfully'",
     "lint": "next lint --fix",
     "lint:check": "next lint",
     "pre-commit": "lint-staged",
     "prepare": "husky install || echo 'Husky not installed'",
-    "security-audit": "npm audit --audit-level moderate",
+    "security-audit": "pnpm audit --audit-level moderate",
     "start": "next start",
     "test": "jest",
     "test:coverage": "jest --coverage",
     "test:watch": "jest --watch",
     "type-check": "tsc --noEmit",
-    "update-deps": "npm-check-updates -u",
+    "update-deps": "pnpm update --latest",
     "vercel-build": "next build"
   },
   "lint-staged": {
@@ -129,6 +130,7 @@
     "lucide-react": "^0.454.0",
     "next": "15.2.4",
     "next-themes": "latest",
+    "only-allow": "^1.2.1",
     "react": "^19",
     "react-day-picker": "latest",
     "react-dom": "^19",
@@ -175,9 +177,9 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
-  "packageManager": "npm@10.9.0",
+  "packageManager": "pnpm@9.0.6",
   "engines": {
     "node": ">=18.17.0",
-    "npm": ">=9.0.0"
+    "pnpm": ">=9.0.6"
   }
 }

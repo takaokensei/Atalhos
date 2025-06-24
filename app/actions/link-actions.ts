@@ -1,6 +1,6 @@
 "use server"
 
-import { sql, isNeonAvailable } from "../../lib/neon"
+import { sql, isNeonAvailable, ensureTablesExist } from "../../lib/neon"
 import type { LinkItem } from "../../types"
 
 export interface LinkActionResult {
@@ -10,16 +10,38 @@ export interface LinkActionResult {
   details?: string
 }
 
+// Ensure tables exist before any operation
+async function ensureDatabase(): Promise<{ success: boolean; error?: string }> {
+  if (!isNeonAvailable()) {
+    return {
+      success: false,
+      error: "Database not available - Neon database not configured",
+    }
+  }
+
+  const tablesResult = await ensureTablesExist()
+  if (!tablesResult.success) {
+    return {
+      success: false,
+      error: `Database setup failed: ${tablesResult.error}`,
+    }
+  }
+
+  return { success: true }
+}
+
 // Save a single link to database
 export async function saveLink(link: LinkItem): Promise<LinkActionResult> {
   try {
     console.log(`Saving link: ${link.slug} -> ${link.url}`)
 
-    if (!isNeonAvailable()) {
+    // Ensure database and tables exist
+    const dbCheck = await ensureDatabase()
+    if (!dbCheck.success) {
       return {
         success: false,
-        error: "Database not available",
-        details: "Neon database not configured",
+        error: "Database setup failed",
+        details: dbCheck.error,
       }
     }
 
@@ -82,11 +104,13 @@ export async function updateLink(link: LinkItem): Promise<LinkActionResult> {
   try {
     console.log(`Updating link: ${link.id} -> ${link.slug}`)
 
-    if (!isNeonAvailable()) {
+    // Ensure database and tables exist
+    const dbCheck = await ensureDatabase()
+    if (!dbCheck.success) {
       return {
         success: false,
-        error: "Database not available",
-        details: "Neon database not configured",
+        error: "Database setup failed",
+        details: dbCheck.error,
       }
     }
 
@@ -146,11 +170,13 @@ export async function deleteLink(linkId: string): Promise<LinkActionResult> {
   try {
     console.log(`Deleting link: ${linkId}`)
 
-    if (!isNeonAvailable()) {
+    // Ensure database and tables exist
+    const dbCheck = await ensureDatabase()
+    if (!dbCheck.success) {
       return {
         success: false,
-        error: "Database not available",
-        details: "Neon database not configured",
+        error: "Database setup failed",
+        details: dbCheck.error,
       }
     }
 
@@ -187,11 +213,13 @@ export async function getAllLinks(): Promise<LinkActionResult> {
   try {
     console.log("Fetching all individual links")
 
-    if (!isNeonAvailable()) {
+    // Ensure database and tables exist
+    const dbCheck = await ensureDatabase()
+    if (!dbCheck.success) {
       return {
         success: false,
-        error: "Database not available",
-        details: "Neon database not configured",
+        error: "Database setup failed",
+        details: dbCheck.error,
       }
     }
 
@@ -229,11 +257,13 @@ export async function getLinkBySlug(slug: string): Promise<LinkActionResult> {
   try {
     console.log(`Looking up slug: ${slug}`)
 
-    if (!isNeonAvailable()) {
+    // Ensure database and tables exist
+    const dbCheck = await ensureDatabase()
+    if (!dbCheck.success) {
       return {
         success: false,
-        error: "Database not available",
-        details: "Neon database not configured",
+        error: "Database setup failed",
+        details: dbCheck.error,
       }
     }
 
@@ -279,11 +309,13 @@ export async function getLinkBySlug(slug: string): Promise<LinkActionResult> {
 // Check if a slug exists
 export async function checkSlugExists(slug: string, excludeId?: string): Promise<LinkActionResult> {
   try {
-    if (!isNeonAvailable()) {
+    // Ensure database and tables exist
+    const dbCheck = await ensureDatabase()
+    if (!dbCheck.success) {
       return {
         success: false,
-        error: "Database not available",
-        details: "Neon database not configured",
+        error: "Database setup failed",
+        details: dbCheck.error,
       }
     }
 

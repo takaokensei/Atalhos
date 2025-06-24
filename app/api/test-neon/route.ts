@@ -1,33 +1,54 @@
 import { NextResponse } from "next/server"
-import { testNeonConnection, isNeonAvailable, getNeonError } from "../../../lib/neon"
+import { testNeonConnection, checkTablesExist, ensureTablesExist } from "../../../lib/neon"
 
 export async function GET() {
   try {
-    console.log("Testing Neon connection...")
+    console.log("Testing Neon database connection...")
 
-    if (!isNeonAvailable()) {
-      const error = getNeonError()
-      return NextResponse.json({
-        success: false,
-        error: "Neon not configured",
-        details: error,
-        timestamp: new Date().toISOString(),
-      })
+    // Test connection
+    const connectionResult = await testNeonConnection()
+
+    if (!connectionResult.success) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: connectionResult.error,
+          details: connectionResult.details,
+          timestamp: new Date().toISOString(),
+        },
+        { status: 500 },
+      )
     }
 
-    const result = await testNeonConnection()
+    // Check if tables exist
+    const tablesResult = await checkTablesExist()
+
+    let setupResult = null
+    if (!tablesResult.success) {
+      console.log("Tables missing, attempting to create them...")
+      setupResult = await ensureTablesExist()
+    }
 
     return NextResponse.json({
-      ...result,
+      success: true,
+      connection: "OK",
+      details: {
+        ...connectionResult.details,
+        tablesCheck: tablesResult,
+        autoSetup: setupResult,
+      },
       timestamp: new Date().toISOString(),
     })
   } catch (error) {
-    console.error("Test API error:", error)
-    return NextResponse.json({
-      success: false,
-      error: "Test failed",
-      details: error instanceof Error ? error.message : "Unknown error",
-      timestamp: new Date().toISOString(),
-    })
+    console.error("Neon test error:", error)
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Test failed",
+        details: error instanceof Error ? error.message : "Unknown error",
+        timestamp: new Date().toISOString(),
+      },
+      { status: 500 },
+    )
   }
 }

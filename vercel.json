@@ -1,0 +1,20 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "/api/:path*"
+    },
+    {
+      "source": "/:slug([a-zA-Z0-9_-]+)",
+      "destination": "/api/resolve/:slug"
+    }
+  ],
+  "functions": {
+    "app/api/resolve/[slug]/route.ts": {
+      "maxDuration": 10
+    },
+    "app/api/redirect/[slug]/route.ts": {
+      "maxDuration": 10
+    }
+  }
+}

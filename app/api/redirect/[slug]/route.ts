@@ -1,12 +1,29 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { getLinkBySlug } from "../../../actions/link-actions"
 
-export async function GET(request: NextRequest, { params }: { params: { slug: string } }) {
-  const { slug } = params
+export async function GET(request: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
+  try {
+    const { slug } = await params
 
-  // Since we're using localStorage (client-side), we can't access the links server-side
-  // We'll redirect to a special page that handles the slug lookup client-side
-  const baseUrl = request.nextUrl.origin
+    if (!slug) {
+      return NextResponse.redirect(new URL("/?error=missing-slug", request.url))
+    }
 
-  // Redirect to a slug handler page that will check localStorage and redirect accordingly
-  return NextResponse.redirect(`${baseUrl}/slug/${slug}`)
+    console.log(`Redirecting slug: ${slug}`)
+
+    const result = await getLinkBySlug(slug)
+
+    if (!result.success || !result.data) {
+      console.log(`Slug not found: ${slug}`)
+      return NextResponse.redirect(new URL(`/?slug=${encodeURIComponent(slug)}&error=not-found`, request.url))
+    }
+
+    const link = result.data
+    console.log(`Redirecting ${slug} to ${link.url}`)
+
+    return NextResponse.redirect(link.url, { status: 302 })
+  } catch (error) {
+    console.error("Redirect error:", error)
+    return NextResponse.redirect(new URL("/?error=server-error", request.url))
+  }
 }

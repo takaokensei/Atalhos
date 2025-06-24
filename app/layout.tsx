@@ -1,10 +1,25 @@
 import type React from "react"
 import type { Metadata } from "next"
-import { Inter } from "next/font/google"
+import { Inter, JetBrains_Mono } from "next/font/google"
 import "./globals.css"
 import { ThemeProvider } from "../components/theme-provider"
 
-const inter = Inter({ subsets: ["latin"] })
+// Optimize font loading with Next.js font optimization
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-sans",
+  display: "swap",
+  preload: true,
+  fallback: ["system-ui", "arial"],
+})
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ["latin"],
+  variable: "--font-mono",
+  display: "swap",
+  preload: true,
+  fallback: ["Consolas", "Monaco", "monospace"],
+})
 
 export const metadata: Metadata = {
   title: "Atalho - Organizador de Links",
@@ -32,16 +47,21 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="pt-BR" suppressHydrationWarning>
+    <html lang="pt-BR" suppressHydrationWarning className={`${inter.variable} ${jetbrainsMono.variable}`}>
       <head>
+        {/* Preload critical fonts */}
+        <link
+          rel="preload"
+          href="/_next/static/media/inter-latin.woff2"
+          as="font"
+          type="font/woff2"
+          crossOrigin="anonymous"
+        />
+
         {/* Primary favicon */}
         <link rel="icon" href="/favicon.png" type="image/svg+xml" />
-
-        {/* Fallback favicons for different sizes */}
         <link rel="icon" href="/favicon-32x32.png" sizes="32x32" type="image/svg+xml" />
         <link rel="icon" href="/favicon-16x16.png" sizes="16x16" type="image/svg+xml" />
-
-        {/* Apple touch icon */}
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
         {/* Theme colors */}
@@ -52,7 +72,7 @@ export default function RootLayout({
         <meta name="msapplication-TileColor" content="#3B82F6" />
         <meta name="msapplication-config" content="/browserconfig.xml" />
       </head>
-      <body className={inter.className}>
+      <body className={`${inter.className} font-sans antialiased`}>
         <ThemeProvider defaultTheme="system" storageKey="atalho-theme">
           {children}
         </ThemeProvider>

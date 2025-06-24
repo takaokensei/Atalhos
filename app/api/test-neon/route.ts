@@ -1,21 +1,21 @@
 import { NextResponse } from "next/server"
-import { testSupabaseConnection, isSupabaseAvailable, getSupabaseError } from "../../../lib/supabase"
+import { testNeonConnection, isNeonAvailable, getNeonError } from "../../../lib/neon"
 
 export async function GET() {
   try {
-    console.log("Testing Supabase connection...")
+    console.log("Testing Neon connection...")
 
-    if (!isSupabaseAvailable()) {
-      const error = getSupabaseError()
+    if (!isNeonAvailable()) {
+      const error = getNeonError()
       return NextResponse.json({
         success: false,
-        error: "Supabase not configured",
+        error: "Neon not configured",
         details: error,
         timestamp: new Date().toISOString(),
       })
     }
 
-    const result = await testSupabaseConnection()
+    const result = await testNeonConnection()
 
     return NextResponse.json({
       ...result,

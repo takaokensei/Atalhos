@@ -1,6 +1,6 @@
 "use server"
 
-import { supabase, isSupabaseAvailable } from "../../lib/supabase"
+import { sql, isNeonAvailable } from "../../lib/neon"
 import type { LinkItem } from "../../types"
 
 export interface LinkActionResult {
@@ -15,31 +15,22 @@ export async function saveLink(link: LinkItem): Promise<LinkActionResult> {
   try {
     console.log(`Saving link: ${link.slug} -> ${link.url}`)
 
-    if (!isSupabaseAvailable()) {
+    if (!isNeonAvailable()) {
       return {
         success: false,
         error: "Database not available",
-        details: "Supabase not configured",
+        details: "Neon database not configured",
       }
     }
 
     // Check if slug already exists
-    const { data: existingLink, error: checkError } = await supabase!
-      .from("shortcuts_links")
-      .select("id, slug")
-      .eq("slug", link.slug)
-      .maybeSingle()
+    const existingLinks = await sql!`
+      SELECT id, slug FROM shortcuts_links 
+      WHERE slug = ${link.slug}
+      LIMIT 1
+    `
 
-    if (checkError) {
-      console.error("Error checking existing slug:", checkError)
-      return {
-        success: false,
-        error: "Failed to check existing slug",
-        details: checkError.message,
-      }
-    }
-
-    if (existingLink) {
+    if (existingLinks.length > 0) {
       console.log(`Slug ${link.slug} already exists`)
       return {
         success: false,
@@ -49,32 +40,32 @@ export async function saveLink(link: LinkItem): Promise<LinkActionResult> {
     }
 
     // Insert the link
-    const { data, error } = await supabase!
-      .from("shortcuts_links")
-      .insert({
-        id: link.id,
-        url: link.url,
-        slug: link.slug,
-        title: link.title || null,
-        collection_id: null, // Individual links don't belong to collections
-        created_at: link.createdAt.toISOString(),
-      })
-      .select()
-      .single()
+    const result = await sql!`
+      INSERT INTO shortcuts_links (id, url, slug, title, collection_id, created_at, updated_at)
+      VALUES (
+        ${link.id},
+        ${link.url},
+        ${link.slug},
+        ${link.title || null},
+        null,
+        ${link.createdAt.toISOString()},
+        ${link.createdAt.toISOString()}
+      )
+      RETURNING *
+    `
 
-    if (error) {
-      console.error("Error inserting link:", error)
+    if (result.length === 0) {
       return {
         success: false,
         error: "Failed to save link",
-        details: error.message,
+        details: "No rows returned from insert",
       }
     }
 
     console.log(`Link saved successfully: ${link.slug}`)
     return {
       success: true,
-      data,
+      data: result[0],
     }
   } catch (error) {
     console.error("Unexpected error saving link:", error)
@@ -91,32 +82,22 @@ export async function updateLink(link: LinkItem): Promise<LinkActionResult> {
   try {
     console.log(`Updating link: ${link.id} -> ${link.slug}`)
 
-    if (!isSupabaseAvailable()) {
+    if (!isNeonAvailable()) {
       return {
         success: false,
         error: "Database not available",
-        details: "Supabase not configured",
+        details: "Neon database not configured",
       }
     }
 
     // Check if new slug conflicts with other links
-    const { data: existingLink, error: checkError } = await supabase!
-      .from("shortcuts_links")
-      .select("id, slug")
-      .eq("slug", link.slug)
-      .neq("id", link.id)
-      .maybeSingle()
+    const conflictingLinks = await sql!`
+      SELECT id, slug FROM shortcuts_links 
+      WHERE slug = ${link.slug} AND id != ${link.id}
+      LIMIT 1
+    `
 
-    if (checkError) {
-      console.error("Error checking slug conflict:", checkError)
-      return {
-        success: false,
-        error: "Failed to check slug conflict",
-        details: checkError.message,
-      }
-    }
-
-    if (existingLink) {
+    if (conflictingLinks.length > 0) {
       console.log(`Slug ${link.slug} conflicts with existing link`)
       return {
         success: false,
@@ -126,30 +107,29 @@ export async function updateLink(link: LinkItem): Promise<LinkActionResult> {
     }
 
     // Update the link
-    const { data, error } = await supabase!
-      .from("shortcuts_links")
-      .update({
-        url: link.url,
-        slug: link.slug,
-        title: link.title || null,
-      })
-      .eq("id", link.id)
-      .select()
-      .single()
+    const result = await sql!`
+      UPDATE shortcuts_links 
+      SET 
+        url = ${link.url},
+        slug = ${link.slug},
+        title = ${link.title || null},
+        updated_at = NOW()
+      WHERE id = ${link.id}
+      RETURNING *
+    `
 
-    if (error) {
-      console.error("Error updating link:", error)
+    if (result.length === 0) {
       return {
         success: false,
-        error: "Failed to update link",
-        details: error.message,
+        error: "Link not found",
+        details: "No link found with the specified ID",
       }
     }
 
     console.log(`Link updated successfully: ${link.slug}`)
     return {
       success: true,
-      data,
+      data: result[0],
     }
   } catch (error) {
     console.error("Unexpected error updating link:", error)
@@ -166,22 +146,25 @@ export async function deleteLink(linkId: string): Promise<LinkActionResult> {
   try {
     console.log(`Deleting link: ${linkId}`)
 
-    if (!isSupabaseAvailable()) {
+    if (!isNeonAvailable()) {
       return {
         success: false,
         error: "Database not available",
-        details: "Supabase not configured",
+        details: "Neon database not configured",
       }
     }
 
-    const { error } = await supabase!.from("shortcuts_links").delete().eq("id", linkId)
+    const result = await sql!`
+      DELETE FROM shortcuts_links 
+      WHERE id = ${linkId}
+      RETURNING id
+    `
 
-    if (error) {
-      console.error("Error deleting link:", error)
+    if (result.length === 0) {
       return {
         success: false,
-        error: "Failed to delete link",
-        details: error.message,
+        error: "Link not found",
+        details: "No link found with the specified ID",
       }
     }
 
@@ -204,30 +187,21 @@ export async function getAllLinks(): Promise<LinkActionResult> {
   try {
     console.log("Fetching all individual links")
 
-    if (!isSupabaseAvailable()) {
+    if (!isNeonAvailable()) {
       return {
         success: false,
         error: "Database not available",
-        details: "Supabase not configured",
+        details: "Neon database not configured",
       }
     }
 
-    const { data, error } = await supabase!
-      .from("shortcuts_links")
-      .select("*")
-      .is("collection_id", null)
-      .order("created_at", { ascending: false })
+    const result = await sql!`
+      SELECT * FROM shortcuts_links 
+      WHERE collection_id IS NULL 
+      ORDER BY created_at DESC
+    `
 
-    if (error) {
-      console.error("Error fetching links:", error)
-      return {
-        success: false,
-        error: "Failed to fetch links",
-        details: error.message,
-      }
-    }
-
-    const links: LinkItem[] = (data || []).map((link) => ({
+    const links: LinkItem[] = result.map((link: any) => ({
       id: link.id,
       url: link.url,
       slug: link.slug,
@@ -255,26 +229,21 @@ export async function getLinkBySlug(slug: string): Promise<LinkActionResult> {
   try {
     console.log(`Looking up slug: ${slug}`)
 
-    if (!isSupabaseAvailable()) {
+    if (!isNeonAvailable()) {
       return {
         success: false,
         error: "Database not available",
-        details: "Supabase not configured",
+        details: "Neon database not configured",
       }
     }
 
-    const { data, error } = await supabase!.from("shortcuts_links").select("*").eq("slug", slug).maybeSingle()
+    const result = await sql!`
+      SELECT * FROM shortcuts_links 
+      WHERE slug = ${slug}
+      LIMIT 1
+    `
 
-    if (error) {
-      console.error("Error fetching link by slug:", error)
-      return {
-        success: false,
-        error: "Failed to fetch link",
-        details: error.message,
-      }
-    }
-
-    if (!data) {
+    if (result.length === 0) {
       console.log(`No link found for slug: ${slug}`)
       return {
         success: false,
@@ -283,12 +252,13 @@ export async function getLinkBySlug(slug: string): Promise<LinkActionResult> {
       }
     }
 
+    const linkData = result[0]
     const link: LinkItem = {
-      id: data.id,
-      url: data.url,
-      slug: data.slug,
-      title: data.title || undefined,
-      createdAt: new Date(data.created_at),
+      id: linkData.id,
+      url: linkData.url,
+      slug: linkData.slug,
+      title: linkData.title || undefined,
+      createdAt: new Date(linkData.created_at),
     }
 
     console.log(`Found link for slug ${slug}: ${link.url}`)
@@ -309,33 +279,32 @@ export async function getLinkBySlug(slug: string): Promise<LinkActionResult> {
 // Check if a slug exists
 export async function checkSlugExists(slug: string, excludeId?: string): Promise<LinkActionResult> {
   try {
-    if (!isSupabaseAvailable()) {
+    if (!isNeonAvailable()) {
       return {
         success: false,
         error: "Database not available",
-        details: "Supabase not configured",
+        details: "Neon database not configured",
       }
     }
 
-    let query = supabase!.from("shortcuts_links").select("id").eq("slug", slug)
-
+    let result
     if (excludeId) {
-      query = query.neq("id", excludeId)
-    }
-
-    const { data, error } = await query.maybeSingle()
-
-    if (error) {
-      return {
-        success: false,
-        error: "Failed to check slug",
-        details: error.message,
-      }
+      result = await sql!`
+        SELECT id FROM shortcuts_links 
+        WHERE slug = ${slug} AND id != ${excludeId}
+        LIMIT 1
+      `
+    } else {
+      result = await sql!`
+        SELECT id FROM shortcuts_links 
+        WHERE slug = ${slug}
+        LIMIT 1
+      `
     }
 
     return {
       success: true,
-      data: { exists: !!data },
+      data: { exists: result.length > 0 },
     }
   } catch (error) {
     return {

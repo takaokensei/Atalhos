@@ -32,8 +32,8 @@ export function useLinkSync() {
       const localLinks = loadFromLocalStorage()
       setLinks(localLinks)
 
-      // Then sync with server
-      await syncWithServer()
+      // Then sync with Neon database
+      await syncWithDatabase()
     } catch (error) {
       console.error("Error loading initial data:", error)
     }
@@ -75,20 +75,20 @@ export function useLinkSync() {
     setSyncStatus((prev) => ({ ...prev, lastSync: now }))
   }
 
-  const syncWithServer = async () => {
+  const syncWithDatabase = async () => {
     setSyncStatus((prev) => ({ ...prev, syncing: true, error: null }))
 
     try {
       const result = await getAllLinks()
 
       if (result.success && result.data) {
-        const serverLinks = result.data as LinkItem[]
-        setLinks(serverLinks)
-        saveToLocalStorage(serverLinks)
+        const databaseLinks = result.data as LinkItem[]
+        setLinks(databaseLinks)
+        saveToLocalStorage(databaseLinks)
         updateLastSync()
-        console.log(`Synced ${serverLinks.length} links from server`)
+        console.log(`Synced ${databaseLinks.length} links from Neon database`)
       } else {
-        console.log("Server sync failed, using local data:", result.error)
+        console.log("Database sync failed, using local data:", result.error)
         setSyncStatus((prev) => ({ ...prev, error: result.error || "Sync failed" }))
       }
     } catch (error) {
@@ -106,17 +106,17 @@ export function useLinkSync() {
       setLinks(updatedLinks)
       saveToLocalStorage(updatedLinks)
 
-      // Save to server
+      // Save to Neon database
       const result = await saveLink(newLink)
 
       if (!result.success) {
-        // Revert local changes if server save failed
+        // Revert local changes if database save failed
         setLinks(links)
         saveToLocalStorage(links)
         return { success: false, error: result.error }
       }
 
-      console.log("Link saved successfully:", newLink.slug)
+      console.log("Link saved successfully to Neon:", newLink.slug)
       return { success: true }
     } catch (error) {
       // Revert local changes
@@ -133,17 +133,17 @@ export function useLinkSync() {
       setLinks(updatedLinks)
       saveToLocalStorage(updatedLinks)
 
-      // Update on server
+      // Update in Neon database
       const result = await updateLink(updatedLink)
 
       if (!result.success) {
-        // Revert local changes if server update failed
+        // Revert local changes if database update failed
         setLinks(links)
         saveToLocalStorage(links)
         return { success: false, error: result.error }
       }
 
-      console.log("Link updated successfully:", updatedLink.slug)
+      console.log("Link updated successfully in Neon:", updatedLink.slug)
       return { success: true }
     } catch (error) {
       // Revert local changes
@@ -160,17 +160,17 @@ export function useLinkSync() {
       setLinks(updatedLinks)
       saveToLocalStorage(updatedLinks)
 
-      // Delete from server
+      // Delete from Neon database
       const result = await deleteLink(linkId)
 
       if (!result.success) {
-        // Revert local changes if server delete failed
+        // Revert local changes if database delete failed
         setLinks(links)
         saveToLocalStorage(links)
         return { success: false, error: result.error }
       }
 
-      console.log("Link deleted successfully")
+      console.log("Link deleted successfully from Neon")
       return { success: true }
     } catch (error) {
       // Revert local changes
@@ -185,7 +185,7 @@ export function useLinkSync() {
   }
 
   const manualSync = useCallback(async () => {
-    await syncWithServer()
+    await syncWithDatabase()
   }, [])
 
   return {

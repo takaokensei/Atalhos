@@ -1,28 +1,34 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getLinkBySlug } from "../../../actions/link-actions"
 
-export async function GET(request: NextRequest, { params }: { params: { slug: string } }) {
-  const { slug } = params
-
+export async function GET(request: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   try {
-    console.log(`Resolving slug: ${slug}`)
+    const { slug } = await params
 
-    // Get link from database
-    const result = await getLinkBySlug(slug)
-
-    if (result.success && result.data) {
-      console.log(`Found link for slug ${slug}: ${result.data.url}`)
-      return NextResponse.redirect(result.data.url, { status: 302 })
+    if (!slug) {
+      return NextResponse.json({ error: "Slug is required" }, { status: 400 })
     }
 
-    console.log(`Link not found for slug: ${slug}`)
+    console.log(`Resolving slug: ${slug}`)
 
-    // If not found, redirect to main page with slug info
-    const baseUrl = request.nextUrl.origin
-    return NextResponse.redirect(`${baseUrl}/?slug=${slug}&error=not-found`, { status: 302 })
+    const result = await getLinkBySlug(slug)
+
+    if (!result.success || !result.data) {
+      console.log(`Slug not found: ${slug}`)
+      return NextResponse.json({ error: "Slug not found", slug }, { status: 404 })
+    }
+
+    const link = result.data
+    console.log(`Resolved ${slug} to ${link.url}`)
+
+    return NextResponse.json({
+      slug: link.slug,
+      url: link.url,
+      title: link.title,
+      createdAt: link.createdAt,
+    })
   } catch (error) {
-    console.error("Error resolving slug:", error)
-    const baseUrl = request.nextUrl.origin
-    return NextResponse.redirect(`${baseUrl}/?slug=${slug}&error=server-error`, { status: 302 })
+    console.error("Resolve error:", error)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }

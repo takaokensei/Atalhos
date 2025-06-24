@@ -10,9 +10,16 @@ corepack enable
 corepack prepare pnpm@9.0.6 --activate
 
 # Verify pnpm version
-pnpm --version
+echo "pnpm version: $(pnpm --version)"
 
-# Install dependencies
-pnpm install --frozen-lockfile
+# Remove outdated lock file if it exists
+if [ -f "pnpm-lock.yaml" ]; then
+    echo "Removing outdated pnpm-lock.yaml..."
+    rm pnpm-lock.yaml
+fi
+
+# Install dependencies and generate new lock file
+echo "Installing dependencies..."
+pnpm install
 
 echo "pnpm setup complete!"

@@ -32,7 +32,6 @@
     "dev": "next dev",
     "format": "prettier --write \"**/*.{js,jsx,ts,tsx,json,md,css}\"",
     "format:check": "prettier --check \"**/*.{js,jsx,ts,tsx,json,md,css}\"",
-    "preinstall": "npx only-allow npm",
     "postinstall": "echo 'Installation completed successfully'",
     "lint": "next lint --fix",
     "lint:check": "next lint",
@@ -84,6 +83,12 @@
       "<rootDir>/node_modules/"
     ]
   },
+  "resolutions": {
+    "@types/node": "^20.17.9"
+  },
+  "overrides": {
+    "@types/node": "^20.17.9"
+  },
   "dependencies": {
     "@ai-sdk/google": "^0.0.52",
     "@emotion/is-prop-valid": "latest",
@@ -118,7 +123,6 @@
     "@radix-ui/react-tooltip": "latest",
     "@supabase/supabase-js": "latest",
     "@testing-library/jest-dom": "latest",
-    "@vitejs/plugin-react": "latest",
     "ai": "^3.4.32",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -128,31 +132,19 @@
     "framer-motion": "latest",
     "input-otp": "latest",
     "jiti": "latest",
-    "less": "latest",
-    "lightningcss": "latest",
     "lucide-react": "^0.454.0",
     "next": "15.2.4",
     "next-themes": "latest",
-    "only-allow": "^1.2.1",
-    "path": "latest",
     "react": "^19",
     "react-day-picker": "latest",
     "react-dom": "^19",
     "react-hook-form": "latest",
     "react-resizable-panels": "latest",
     "recharts": "latest",
-    "sass": "latest",
-    "sass-embedded": "latest",
     "sonner": "latest",
-    "stylus": "latest",
-    "sugarss": "latest",
     "tailwind-merge": "^2.5.5",
     "tailwindcss-animate": "^1.0.7",
-    "terser": "latest",
-    "tsx": "latest",
     "vaul": "latest",
-    "vite": "latest",
-    "yaml": "latest",
     "zod": "^3.24.1"
   },
   "devDependencies": {
@@ -189,22 +181,9 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
-  "optionalDependencies": {
-    "@next/swc-darwin-arm64": "^15.0.3",
-    "@next/swc-darwin-x64": "^15.0.3",
-    "@next/swc-linux-arm64-gnu": "^15.0.3",
-    "@next/swc-linux-arm64-musl": "^15.0.3",
-    "@next/swc-linux-x64-gnu": "^15.0.3",
-    "@next/swc-linux-x64-musl": "^15.0.3",
-    "@next/swc-win32-arm64-msvc": "^15.0.3",
-    "@next/swc-win32-ia32-msvc": "^15.0.3",
-    "@next/swc-win32-x64-msvc": "^15.0.3"
-  },
   "packageManager": "npm@10.9.0",
   "engines": {
     "node": ">=18.17.0",
-    "npm": ">=9.0.0",
-    "pnpm": "please-use-npm",
-    "yarn": "please-use-npm"
+    "npm": ">=9.0.0"
   }
 }

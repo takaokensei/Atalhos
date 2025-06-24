@@ -45,7 +45,8 @@
     "test:watch": "jest --watch",
     "type-check": "tsc --noEmit",
     "update-deps": "pnpm update --latest",
-    "vercel-build": "next build"
+    "vercel-build": "next build",
+    "vercel-install": "bash scripts/vercel-install.sh"
   },
   "lint-staged": {
     "*.{js,jsx,ts,tsx}": [

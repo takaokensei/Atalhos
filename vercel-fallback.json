@@ -1,6 +1,6 @@
 {
-  "buildCommand": "pnpm run build",
-  "installCommand": "corepack enable && corepack prepare pnpm@9.0.6 --activate && pnpm install",
+  "buildCommand": "npm run build",
+  "installCommand": "npm install --legacy-peer-deps",
   "framework": "nextjs",
   "rewrites": [
     {
@@ -21,9 +21,6 @@
     }
   },
   "env": {
-    "NODE_ENV": "production",
-    "ENABLE_EXPERIMENTAL_COREPACK": "1",
-    "COREPACK_ENABLE_STRICT": "0",
-    "COREPACK_ENABLE_DOWNLOAD_PROMPT": "0"
+    "NODE_ENV": "production"
   }
 }

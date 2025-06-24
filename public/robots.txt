@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /
+
+# Sitemap
+Sitemap: https://atalho.vercel.app/sitemap.xml
+
+# Disallow admin/api routes from indexing
+Disallow: /api/
+Disallow: /_next/
+Disallow: /admin/

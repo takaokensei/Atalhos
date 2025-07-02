@@ -1,36 +1,65 @@
 #!/bin/bash
-# Vercel installation script with Corepack support and lock file handling
 
 set -e
 
-echo "🚀 Starting Vercel installation with pnpm@9.0.6..."
+echo "🚀 Starting Vercel installation process..."
 
-# Remove any existing outdated lock file
-echo "🧹 Cleaning up outdated lock files..."
+# Check if we're in a CI environment
+if [ "$VERCEL" = "1" ] || [ "$CI" = "true" ]; then
+  echo "📦 Running in CI/Vercel environment"
+else
+  echo "🏠 Running in local environment"
+fi
+
+# Remove any existing lock files to prevent conflicts
+echo "🧹 Cleaning up existing lock files..."
 rm -f pnpm-lock.yaml
 rm -f package-lock.json
 rm -f yarn.lock
 
-# Check if Corepack is available
-if ! command -v corepack &> /dev/null; then
-    echo "❌ Corepack not found. Installing..."
-    npm install -g corepack
+# Check if corepack is available
+if command -v corepack >/dev/null 2>&1; then
+  echo "✅ Corepack is available"
+  
+  # Enable corepack
+  echo "🔧 Enabling corepack..."
+  corepack enable
+  
+  # Prepare pnpm 9.0.6
+  echo "📦 Preparing pnpm@9.0.6..."
+  corepack prepare pnpm@9.0.6 --activate
+  
+  # Verify pnpm version
+  echo "🔍 Verifying pnpm version..."
+  pnpm --version
+  
+  # Install dependencies
+  echo "📥 Installing dependencies with pnpm..."
+  pnpm install --no-frozen-lockfile --prefer-offline
+  
+else
+  echo "❌ Corepack not available, falling back to npm..."
+  
+  # Use npm as fallback
+  npm install --legacy-peer-deps --no-audit
 fi
 
-# Enable Corepack
-echo "🔧 Enabling Corepack..."
-corepack enable
+echo "✅ Installation completed successfully!"
 
-# Prepare and activate pnpm 9.0.6
-echo "📦 Preparing pnpm@9.0.6..."
-corepack prepare pnpm@9.0.6 --activate
+# Verify critical dependencies
+echo "🔍 Verifying critical dependencies..."
+if [ -d "node_modules/next" ]; then
+  echo "✅ Next.js installed"
+else
+  echo "❌ Next.js missing"
+  exit 1
+fi
 
-# Verify pnpm version
-echo "✅ Verifying pnpm version..."
-pnpm --version
+if [ -d "node_modules/cssnano" ]; then
+  echo "✅ cssnano installed"
+else
+  echo "❌ cssnano missing"
+  exit 1
+fi
 
-# Install dependencies (this will create a new lock file)
-echo "📥 Installing dependencies..."
-pnpm install --reporter=append-only --no-frozen-lockfile
-
-echo "🎉 Installation completed successfully!"
+echo "🎉 All dependencies verified!"

@@ -13,6 +13,8 @@ import ModernLinkCard from "../components/ModernLinkCard"
 import { ThemeToggle } from "../components/theme-toggle"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import Link from "next/link"
+import { FileArchive } from "lucide-react"
 import {
   LinkIcon,
   Sparkles,
@@ -281,7 +283,13 @@ export default function Home() {
                 </motion.div>
               </div>
 
-              <div className="ml-auto">
+              <div className="ml-auto flex items-center gap-3">
+                <Link href="/files">
+                  <Button variant="outline" size="sm" className="gap-2 bg-transparent">
+                    <FileArchive className="h-4 w-4" />
+                    <span className="hidden sm:inline">File Manager</span>
+                  </Button>
+                </Link>
                 <ThemeToggle />
               </div>
             </div>
@@ -504,14 +512,19 @@ export default function Home() {
                       variant="outline"
                       size="sm"
                       onClick={exportLinks}
-                      className="glass-card border-0 hover:bg-primary/10"
+                      className="glass-card border-0 hover:bg-primary/10 bg-transparent"
                     >
                       <Download className="h-4 w-4 mr-2" />
                       <span className="hidden sm:inline">Exportar</span>
                     </Button>
 
                     <label>
-                      <Button variant="outline" size="sm" asChild className="glass-card border-0 hover:bg-primary/10">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        asChild
+                        className="glass-card border-0 hover:bg-primary/10 bg-transparent"
+                      >
                         <span>
                           <Upload className="h-4 w-4 mr-2" />
                           <span className="hidden sm:inline">Importar</span>

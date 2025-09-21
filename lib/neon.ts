@@ -46,11 +46,11 @@ export async function checkTablesExist(): Promise<{ success: boolean; error?: st
       SELECT table_name 
       FROM information_schema.tables 
       WHERE table_schema = 'public' 
-      AND table_name IN ('shortcuts_links', 'shortcuts_collections')
+      AND table_name IN ('shortcuts_links', 'shortcuts_collections', 'file_uploads')
     `
 
     const existingTables = result.map((row: any) => row.table_name)
-    const requiredTables = ["shortcuts_links", "shortcuts_collections"]
+    const requiredTables = ["shortcuts_links", "shortcuts_collections", "file_uploads"]
     const missingTables = requiredTables.filter((table) => !existingTables.includes(table))
 
     if (missingTables.length > 0) {
@@ -145,10 +145,35 @@ export async function ensureTablesExist(): Promise<{ success: boolean; error?: s
       )
     `
 
+    // Create file_uploads table
+    await sql!`
+      CREATE TABLE IF NOT EXISTS file_uploads (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          filename VARCHAR(255) NOT NULL,
+          original_name VARCHAR(255) NOT NULL,
+          file_size BIGINT NOT NULL,
+          mime_type VARCHAR(100) NOT NULL,
+          file_extension VARCHAR(10) NOT NULL,
+          storage_url TEXT NOT NULL,
+          download_slug VARCHAR(100) UNIQUE NOT NULL,
+          upload_date TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+          download_count INTEGER DEFAULT 0,
+          expires_at TIMESTAMP WITH TIME ZONE,
+          is_active BOOLEAN DEFAULT true,
+          metadata JSONB DEFAULT '{}',
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+          updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      )
+    `
+
     // Create indexes
     await sql!`CREATE INDEX IF NOT EXISTS idx_shortcuts_links_slug ON shortcuts_links(slug)`
     await sql!`CREATE INDEX IF NOT EXISTS idx_shortcuts_links_collection_id ON shortcuts_links(collection_id)`
     await sql!`CREATE INDEX IF NOT EXISTS idx_shortcuts_collections_access_key ON shortcuts_collections(access_key)`
+    await sql!`CREATE INDEX IF NOT EXISTS idx_file_uploads_slug ON file_uploads(download_slug)`
+    await sql!`CREATE INDEX IF NOT EXISTS idx_file_uploads_active ON file_uploads(is_active)`
+    await sql!`CREATE INDEX IF NOT EXISTS idx_file_uploads_expires ON file_uploads(expires_at)`
+    await sql!`CREATE INDEX IF NOT EXISTS idx_file_uploads_upload_date ON file_uploads(upload_date DESC)`
 
     // Create trigger function
     await sql!`
@@ -174,6 +199,14 @@ export async function ensureTablesExist(): Promise<{ success: boolean; error?: s
       DROP TRIGGER IF EXISTS update_shortcuts_collections_updated_at ON shortcuts_collections;
       CREATE TRIGGER update_shortcuts_collections_updated_at
           BEFORE UPDATE ON shortcuts_collections
+          FOR EACH ROW
+          EXECUTE FUNCTION update_updated_at_column()
+    `
+
+    await sql!`
+      DROP TRIGGER IF EXISTS update_file_uploads_updated_at ON file_uploads;
+      CREATE TRIGGER update_file_uploads_updated_at
+          BEFORE UPDATE ON file_uploads
           FOR EACH ROW
           EXECUTE FUNCTION update_updated_at_column()
     `

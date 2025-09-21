@@ -1,106 +1,141 @@
 "use client"
-
-import type React from "react"
-
 import { useState, useCallback } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Upload, FileArchive, X, CheckCircle, AlertCircle } from "lucide-react"
+import { Upload, X, CheckCircle, AlertCircle, File } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { Card, CardContent } from "@/components/ui/card"
-import type { FileUpload, UploadProgress } from "../types/file-upload"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Badge } from "@/components/ui/badge"
+import { toast } from "sonner"
+import { ALLOWED_FILE_TYPES, MAX_FILE_SIZE, type FileUploadResponse } from "@/types/file-upload"
+import { useDropzone } from "react-dropzone"
 
-interface FileUploadProps {
-  onUploadComplete?: (file: FileUpload) => void
+interface UploadFile extends File {
+  id: string
+  progress: number
+  status: "pending" | "uploading" | "success" | "error"
+  error?: string
+  downloadUrl?: string
 }
 
-export default function FileUploadComponent({ onUploadComplete }: FileUploadProps) {
-  const [isDragging, setIsDragging] = useState(false)
-  const [uploading, setUploading] = useState(false)
-  const [progress, setProgress] = useState<UploadProgress | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState<FileUpload | null>(null)
+export default function FileUploadComponent() {
+  const [files, setFiles] = useState<UploadFile[]>([])
+  const [isUploading, setIsUploading] = useState(false)
 
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    setIsDragging(true)
+  const onDrop = useCallback((acceptedFiles: File[], rejectedFiles: any[]) => {
+    // Handle rejected files
+    rejectedFiles.forEach(({ file, errors }) => {
+      errors.forEach((error: any) => {
+        if (error.code === "file-too-large") {
+          toast.error(`${file.name} is too large. Maximum size is 100MB.`)
+        } else if (error.code === "file-invalid-type") {
+          toast.error(`${file.name} is not a supported file type. Only .zip and .rar files are allowed.`)
+        }
+      })
+    })
+
+    // Add accepted files
+    const newFiles: UploadFile[] = acceptedFiles.map((file) => ({
+      ...file,
+      id: Math.random().toString(36).substr(2, 9),
+      progress: 0,
+      status: "pending",
+    }))
+
+    setFiles((prev) => [...prev, ...newFiles])
   }, [])
 
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    setIsDragging(false)
-  }, [])
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    accept: {
+      "application/zip": [".zip"],
+      "application/x-zip-compressed": [".zip"],
+      "application/vnd.rar": [".rar"],
+      "application/x-rar-compressed": [".rar"],
+    },
+    maxSize: MAX_FILE_SIZE,
+    multiple: true,
+  })
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    setIsDragging(false)
+  const removeFile = (id: string) => {
+    setFiles((prev) => prev.filter((file) => file.id !== id))
+  }
 
-    const files = Array.from(e.dataTransfer.files)
-    if (files.length > 0) {
-      handleFileUpload(files[0])
-    }
-  }, [])
-
-  const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files
-    if (files && files.length > 0) {
-      handleFileUpload(files[0])
-    }
-  }, [])
-
-  const handleFileUpload = async (file: File) => {
-    setError(null)
-    setSuccess(null)
-    setUploading(true)
-    setProgress({ loaded: 0, total: file.size, percentage: 0 })
+  const uploadFile = async (file: UploadFile) => {
+    const formData = new FormData()
+    formData.append("file", file)
 
     try {
-      const formData = new FormData()
-      formData.append("file", file)
+      setFiles((prev) => prev.map((f) => (f.id === file.id ? { ...f, status: "uploading", progress: 0 } : f)))
 
       const xhr = new XMLHttpRequest()
 
-      xhr.upload.addEventListener("progress", (e) => {
-        if (e.lengthComputable) {
-          const percentage = Math.round((e.loaded / e.total) * 100)
-          setProgress({
-            loaded: e.loaded,
-            total: e.total,
-            percentage,
-          })
-        }
-      })
-
-      xhr.addEventListener("load", () => {
-        if (xhr.status === 200) {
-          const response = JSON.parse(xhr.responseText)
-          if (response.success) {
-            setSuccess(response.file)
-            onUploadComplete?.(response.file)
-          } else {
-            setError(response.error || "Upload failed")
+      return new Promise<void>((resolve, reject) => {
+        xhr.upload.addEventListener("progress", (event) => {
+          if (event.lengthComputable) {
+            const progress = Math.round((event.loaded / event.total) * 100)
+            setFiles((prev) => prev.map((f) => (f.id === file.id ? { ...f, progress } : f)))
           }
-        } else {
-          const response = JSON.parse(xhr.responseText)
-          setError(response.error || "Upload failed")
-        }
-        setUploading(false)
-        setProgress(null)
-      })
+        })
 
-      xhr.addEventListener("error", () => {
-        setError("Network error occurred")
-        setUploading(false)
-        setProgress(null)
-      })
+        xhr.addEventListener("load", () => {
+          if (xhr.status === 200) {
+            const response: FileUploadResponse = JSON.parse(xhr.responseText)
+            if (response.success) {
+              setFiles((prev) =>
+                prev.map((f) =>
+                  f.id === file.id
+                    ? {
+                        ...f,
+                        status: "success",
+                        progress: 100,
+                        downloadUrl: response.downloadUrl,
+                      }
+                    : f,
+                ),
+              )
+              toast.success(`${file.name} uploaded successfully!`)
+              resolve()
+            } else {
+              throw new Error(response.error || "Upload failed")
+            }
+          } else {
+            throw new Error(`Upload failed with status ${xhr.status}`)
+          }
+        })
 
-      xhr.open("POST", "/api/upload")
-      xhr.send(formData)
-    } catch (err) {
-      setError("Upload failed")
-      setUploading(false)
-      setProgress(null)
+        xhr.addEventListener("error", () => {
+          reject(new Error("Network error"))
+        })
+
+        xhr.open("POST", "/api/upload")
+        xhr.send(formData)
+      })
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Upload failed"
+      setFiles((prev) => prev.map((f) => (f.id === file.id ? { ...f, status: "error", error: errorMessage } : f)))
+      toast.error(`Failed to upload ${file.name}: ${errorMessage}`)
+      throw error
     }
+  }
+
+  const uploadAll = async () => {
+    const pendingFiles = files.filter((f) => f.status === "pending")
+    if (pendingFiles.length === 0) return
+
+    setIsUploading(true)
+
+    try {
+      await Promise.allSettled(pendingFiles.map(uploadFile))
+    } finally {
+      setIsUploading(false)
+    }
+  }
+
+  const copyToClipboard = (url: string) => {
+    navigator.clipboard.writeText(url)
+    toast.success("Download link copied to clipboard!")
   }
 
   const formatFileSize = (bytes: number) => {
@@ -111,123 +146,109 @@ export default function FileUploadComponent({ onUploadComplete }: FileUploadProp
     return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
   }
 
-  const resetState = () => {
-    setError(null)
-    setSuccess(null)
-    setProgress(null)
-  }
-
   return (
-    <Card className="w-full max-w-2xl mx-auto">
-      <CardContent className="p-6">
-        <AnimatePresence mode="wait">
-          {success ? (
-            <motion.div
-              key="success"
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              className="text-center py-8"
-            >
-              <CheckCircle className="h-16 w-16 text-green-500 mx-auto mb-4" />
-              <h3 className="text-xl font-semibold mb-2">Upload Successful!</h3>
-              <p className="text-muted-foreground mb-4">
-                File: <span className="font-mono">{success.original_filename}</span>
-              </p>
-              <div className="bg-muted p-3 rounded-lg mb-4">
-                <p className="text-sm font-medium mb-1">Download Link:</p>
-                <code className="text-sm bg-background px-2 py-1 rounded">
-                  {window.location.origin}/download/{success.slug}
-                </code>
-              </div>
-              <Button onClick={resetState} variant="outline">
-                Upload Another File
-              </Button>
-            </motion.div>
-          ) : (
-            <motion.div key="upload" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              <div
-                className={`
-                  border-2 border-dashed rounded-lg p-8 text-center transition-colors
-                  ${isDragging ? "border-primary bg-primary/5" : "border-muted-foreground/25"}
-                  ${uploading ? "pointer-events-none opacity-50" : "cursor-pointer hover:border-primary/50"}
-                `}
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-                onClick={() => document.getElementById("file-input")?.click()}
-              >
-                <input
-                  id="file-input"
-                  type="file"
-                  accept=".zip,.rar"
-                  onChange={handleFileSelect}
-                  className="hidden"
-                  disabled={uploading}
-                />
+    <div className="space-y-6">
+      {/* Upload Area */}
+      <Card>
+        <CardContent className="p-6">
+          <div
+            {...getRootProps()}
+            className={`
+              border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors
+              ${isDragActive ? "border-primary bg-primary/5" : "border-muted-foreground/25 hover:border-primary/50"}
+            `}
+          >
+            <input {...getInputProps()} />
+            <Upload className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+            <h3 className="text-lg font-semibold mb-2">{isDragActive ? "Drop files here" : "Upload Files"}</h3>
+            <p className="text-muted-foreground mb-4">Drag and drop your .zip or .rar files here, or click to browse</p>
+            <div className="flex flex-wrap justify-center gap-2 mb-4">
+              {ALLOWED_FILE_TYPES.map((type) => (
+                <Badge key={type} variant="secondary">
+                  {type}
+                </Badge>
+              ))}
+            </div>
+            <p className="text-sm text-muted-foreground">Maximum file size: {formatFileSize(MAX_FILE_SIZE)}</p>
+          </div>
+        </CardContent>
+      </Card>
 
-                <motion.div
-                  animate={isDragging ? { scale: 1.1 } : { scale: 1 }}
-                  transition={{ type: "spring", stiffness: 300, damping: 20 }}
-                >
-                  <FileArchive className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                </motion.div>
-
-                <h3 className="text-lg font-semibold mb-2">
-                  {isDragging ? "Drop your file here" : "Upload Archive File"}
-                </h3>
-
-                <p className="text-muted-foreground mb-4">Drag & drop or click to select a .zip or .rar file</p>
-
-                <div className="flex items-center justify-center gap-4 text-sm text-muted-foreground">
-                  <span>Max size: 100MB</span>
-                  <span>•</span>
-                  <span>Formats: ZIP, RAR</span>
-                </div>
-
-                {!uploading && (
-                  <Button className="mt-4 bg-transparent" variant="outline">
-                    <Upload className="h-4 w-4 mr-2" />
-                    Choose File
-                  </Button>
-                )}
-              </div>
-
-              {uploading && progress && (
-                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mt-6">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium">Uploading...</span>
-                    <span className="text-sm text-muted-foreground">
-                      {formatFileSize(progress.loaded)} / {formatFileSize(progress.total)}
-                    </span>
-                  </div>
-                  <Progress value={progress.percentage} className="h-2" />
-                  <p className="text-center text-sm text-muted-foreground mt-2">{progress.percentage}% complete</p>
-                </motion.div>
+      {/* File List */}
+      <AnimatePresence>
+        {files.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="space-y-4"
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold">Files ({files.length})</h3>
+              {files.some((f) => f.status === "pending") && (
+                <Button onClick={uploadAll} disabled={isUploading} className="ml-auto">
+                  {isUploading ? "Uploading..." : "Upload All"}
+                </Button>
               )}
+            </div>
 
-              {error && (
+            <div className="space-y-3">
+              {files.map((file) => (
                 <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="mt-6 p-4 bg-destructive/10 border border-destructive/20 rounded-lg"
+                  key={file.id}
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  className="border rounded-lg p-4"
                 >
-                  <div className="flex items-start gap-3">
-                    <AlertCircle className="h-5 w-5 text-destructive mt-0.5" />
-                    <div>
-                      <h4 className="font-medium text-destructive">Upload Failed</h4>
-                      <p className="text-sm text-destructive/80 mt-1">{error}</p>
+                  <div className="flex items-center gap-3">
+                    <File className="h-8 w-8 text-muted-foreground flex-shrink-0" />
+
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <p className="font-medium truncate">{file.name}</p>
+                        <Badge variant="outline">{formatFileSize(file.size)}</Badge>
+
+                        {file.status === "success" && <CheckCircle className="h-4 w-4 text-green-500" />}
+                        {file.status === "error" && <AlertCircle className="h-4 w-4 text-red-500" />}
+                      </div>
+
+                      {file.status === "uploading" && (
+                        <div className="space-y-1">
+                          <Progress value={file.progress} className="h-2" />
+                          <p className="text-xs text-muted-foreground">{file.progress}% uploaded</p>
+                        </div>
+                      )}
+
+                      {file.status === "error" && file.error && (
+                        <Alert className="mt-2">
+                          <AlertCircle className="h-4 w-4" />
+                          <AlertDescription>{file.error}</AlertDescription>
+                        </Alert>
+                      )}
+
+                      {file.status === "success" && file.downloadUrl && (
+                        <div className="flex items-center gap-2 mt-2">
+                          <Button size="sm" variant="outline" onClick={() => copyToClipboard(file.downloadUrl!)}>
+                            Copy Link
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={() => window.open(file.downloadUrl, "_blank")}>
+                            Download
+                          </Button>
+                        </div>
+                      )}
                     </div>
-                    <Button variant="ghost" size="sm" onClick={() => setError(null)} className="ml-auto">
+
+                    <Button size="sm" variant="ghost" onClick={() => removeFile(file.id)} className="flex-shrink-0">
                       <X className="h-4 w-4" />
                     </Button>
                   </div>
                 </motion.div>
-              )}
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </CardContent>
-    </Card>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   )
 }

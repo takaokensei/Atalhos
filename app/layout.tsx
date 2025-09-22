@@ -1,44 +1,43 @@
 import type React from "react"
 import type { Metadata } from "next"
-import { Inter, JetBrains_Mono } from "next/font/google"
+import { Inter } from "next/font/google"
 import "./globals.css"
-import { ThemeProvider } from "../components/theme-provider"
+import { ThemeProvider } from "@/components/theme-provider"
+import { Toaster } from "@/components/ui/toaster"
 
-// Optimize font loading with Next.js font optimization
 const inter = Inter({
   subsets: ["latin"],
-  variable: "--font-sans",
   display: "swap",
-  preload: true,
-  fallback: ["system-ui", "arial"],
-})
-
-const jetbrainsMono = JetBrains_Mono({
-  subsets: ["latin"],
-  variable: "--font-mono",
-  display: "swap",
-  preload: true,
-  fallback: ["Consolas", "Monaco", "monospace"],
+  variable: "--font-inter",
 })
 
 export const metadata: Metadata = {
-  title: "Atalho - Organizador de Links",
-  description: "Organize seus links com slugs inteligentes gerados por IA",
+  title: "Atalho - Gerenciador de Links e Arquivos",
+  description: "Crie atalhos personalizados para seus links e compartilhe arquivos facilmente",
+  keywords: ["links", "atalhos", "compartilhamento", "arquivos", "urls"],
+  authors: [{ name: "Atalho Team" }],
+  creator: "Atalho",
+  publisher: "Atalho",
+  formatDetection: {
+    email: false,
+    address: false,
+    telephone: false,
+  },
   icons: {
     icon: [
-      { url: "/favicon.png", type: "image/svg+xml" },
-      { url: "/favicon-32x32.png", sizes: "32x32", type: "image/svg+xml" },
-      { url: "/favicon-16x16.png", sizes: "16x16", type: "image/svg+xml" },
+      { url: "/favicon.ico" },
+      { url: "/favicon-16x16.png", sizes: "16x16", type: "image/png" },
+      { url: "/favicon-32x32.png", sizes: "32x32", type: "image/png" },
     ],
-    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/svg+xml" }],
-    shortcut: "/favicon.png",
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
   },
   manifest: "/site.webmanifest",
-  generator: "v0.dev",
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#3B82F6" },
-    { media: "(prefers-color-scheme: dark)", color: "#1E40AF" },
-  ],
+  viewport: {
+    width: "device-width",
+    initialScale: 1,
+    maximumScale: 1,
+  },
+    generator: 'v0.app'
 }
 
 export default function RootLayout({
@@ -47,34 +46,15 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="pt-BR" suppressHydrationWarning className={`${inter.variable} ${jetbrainsMono.variable}`}>
+    <html lang="pt-BR" suppressHydrationWarning>
       <head>
-        {/* Preload critical fonts */}
-        <link
-          rel="preload"
-          href="/_next/static/media/inter-latin.woff2"
-          as="font"
-          type="font/woff2"
-          crossOrigin="anonymous"
-        />
-
-        {/* Primary favicon */}
-        <link rel="icon" href="/favicon.png" type="image/svg+xml" />
-        <link rel="icon" href="/favicon-32x32.png" sizes="32x32" type="image/svg+xml" />
-        <link rel="icon" href="/favicon-16x16.png" sizes="16x16" type="image/svg+xml" />
-        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-
-        {/* Theme colors */}
-        <meta name="theme-color" content="#3B82F6" media="(prefers-color-scheme: light)" />
-        <meta name="theme-color" content="#1E40AF" media="(prefers-color-scheme: dark)" />
-
-        {/* Additional meta tags for better favicon support */}
-        <meta name="msapplication-TileColor" content="#3B82F6" />
-        <meta name="msapplication-config" content="/browserconfig.xml" />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
       </head>
-      <body className={`${inter.className} font-sans antialiased`}>
-        <ThemeProvider defaultTheme="system" storageKey="atalho-theme">
-          {children}
+      <body className={`${inter.variable} font-sans antialiased`}>
+        <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
+          <main className="min-h-screen bg-background">{children}</main>
+          <Toaster />
         </ThemeProvider>
       </body>
     </html>

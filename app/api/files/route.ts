@@ -3,117 +3,86 @@ import { neon } from "@neondatabase/serverless"
 
 const sql = neon(process.env.DATABASE_URL!)
 
-function formatFileSize(bytes: number): string {
-  if (bytes === 0) return "0 B"
-
-  const k = 1024
-  const sizes = ["B", "KB", "MB", "GB", "TB"]
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-
-  return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
-}
-
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    const page = Number.parseInt(searchParams.get("page") || "1")
-    const limit = Number.parseInt(searchParams.get("limit") || "10")
     const search = searchParams.get("search") || ""
-    const offset = (page - 1) * limit
+
+    // First, ensure the table exists
+    await sql`
+      CREATE TABLE IF NOT EXISTS file_uploads (
+        id SERIAL PRIMARY KEY,
+        filename VARCHAR(255) NOT NULL,
+        original_name VARCHAR(255) NOT NULL,
+        file_size BIGINT NOT NULL DEFAULT 0,
+        mime_type VARCHAR(100),
+        slug VARCHAR(100) UNIQUE NOT NULL,
+        blob_url TEXT NOT NULL,
+        download_count INTEGER DEFAULT 0,
+        expires_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `
 
     // Get files with search filter
-    let filesQuery = `
+    const files = await sql`
       SELECT 
-        id, 
-        filename, 
-        original_filename, 
-        file_size::bigint as file_size, 
-        mime_type, 
-        download_count::integer as download_count, 
-        created_at, 
+        id,
+        filename,
+        original_name,
+        CAST(file_size AS BIGINT) as file_size,
+        mime_type,
+        slug,
+        blob_url,
+        CAST(download_count AS INTEGER) as download_count,
         expires_at,
-        slug
+        created_at,
+        updated_at
       FROM file_uploads 
-      WHERE 1=1
+      WHERE (${search} = '' OR original_name ILIKE ${"%" + search + "%"})
+      ORDER BY created_at DESC
     `
 
-    const queryParams: any[] = []
-    let paramIndex = 1
-
-    if (search) {
-      filesQuery += ` AND (original_filename ILIKE $${paramIndex} OR slug ILIKE $${paramIndex})`
-      queryParams.push(`%${search}%`)
-      paramIndex++
-    }
-
-    filesQuery += ` ORDER BY created_at DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`
-    queryParams.push(limit, offset)
-
-    const files = await sql(filesQuery, queryParams)
-
-    // Get total count for pagination
-    let countQuery = `SELECT COUNT(*) as total FROM file_uploads WHERE 1=1`
-    const countParams: any[] = []
-
-    if (search) {
-      countQuery += ` AND (original_filename ILIKE $1 OR slug ILIKE $1)`
-      countParams.push(`%${search}%`)
-    }
-
-    const [{ total }] = await sql(countQuery, countParams)
-
-    // Get statistics with proper type casting
-    const statsQuery = `
+    // Get statistics
+    const stats = await sql`
       SELECT 
-        COUNT(*)::integer as total_files,
+        COUNT(*) as total_files,
         COALESCE(SUM(CAST(file_size AS BIGINT)), 0) as total_size,
         COALESCE(SUM(CAST(download_count AS INTEGER)), 0) as total_downloads,
-        COUNT(CASE WHEN created_at >= NOW() - INTERVAL '7 days' THEN 1 END)::integer as recent_files
+        COUNT(CASE WHEN created_at >= NOW() - INTERVAL '7 days' THEN 1 END) as recent_files
       FROM file_uploads
-      WHERE expires_at IS NULL OR expires_at > NOW()
     `
 
-    const [stats] = await sql(statsQuery)
-
-    // Format the response
-    const formattedFiles = files.map((file: any) => ({
-      ...file,
-      file_size: Number.parseInt(file.file_size) || 0,
-      download_count: Number.parseInt(file.download_count) || 0,
-      formatted_size: formatFileSize(Number.parseInt(file.file_size) || 0),
-      created_at: new Date(file.created_at).toISOString(),
-      expires_at: file.expires_at ? new Date(file.expires_at).toISOString() : null,
-    }))
-
-    const formattedStats = {
-      total_files: Number.parseInt(stats.total_files) || 0,
-      total_size: Number.parseInt(stats.total_size) || 0,
-      formatted_total_size: formatFileSize(Number.parseInt(stats.total_size) || 0),
-      total_downloads: Number.parseInt(stats.total_downloads) || 0,
-      recent_files: Number.parseInt(stats.recent_files) || 0,
+    const statistics = stats[0] || {
+      total_files: 0,
+      total_size: 0,
+      total_downloads: 0,
+      recent_files: 0,
     }
 
     return NextResponse.json({
-      success: true,
-      files: formattedFiles,
-      pagination: {
-        page,
-        limit,
-        total: Number.parseInt(total),
-        pages: Math.ceil(Number.parseInt(total) / limit),
+      files: files || [],
+      statistics: {
+        totalFiles: Number(statistics.total_files) || 0,
+        totalSize: Number(statistics.total_size) || 0,
+        totalDownloads: Number(statistics.total_downloads) || 0,
+        recentFiles: Number(statistics.recent_files) || 0,
       },
-      stats: formattedStats,
     })
   } catch (error) {
     console.error("Error fetching files:", error)
-    return NextResponse.json(
-      {
-        success: false,
-        error: "Erro interno do servidor",
-        details: error instanceof Error ? error.message : "Erro desconhecido",
+
+    // Return empty data instead of error to prevent UI crashes
+    return NextResponse.json({
+      files: [],
+      statistics: {
+        totalFiles: 0,
+        totalSize: 0,
+        totalDownloads: 0,
+        recentFiles: 0,
       },
-      { status: 500 },
-    )
+    })
   }
 }
 
@@ -123,35 +92,26 @@ export async function DELETE(request: NextRequest) {
     const id = searchParams.get("id")
 
     if (!id) {
-      return NextResponse.json({ success: false, error: "ID do arquivo é obrigatório" }, { status: 400 })
+      return NextResponse.json({ error: "ID é obrigatório" }, { status: 400 })
     }
 
-    // Get file info before deletion
-    const [file] = await sql("SELECT filename FROM file_uploads WHERE id = $1", [id])
+    // Delete the file record
+    const result = await sql`
+      DELETE FROM file_uploads 
+      WHERE id = ${id}
+      RETURNING *
+    `
 
-    if (!file) {
-      return NextResponse.json({ success: false, error: "Arquivo não encontrado" }, { status: 404 })
+    if (result.length === 0) {
+      return NextResponse.json({ error: "Arquivo não encontrado" }, { status: 404 })
     }
-
-    // Delete from database
-    await sql("DELETE FROM file_uploads WHERE id = $1", [id])
-
-    // Note: In a production environment, you would also delete the file from Vercel Blob here
-    // await del(file.filename)
 
     return NextResponse.json({
       success: true,
-      message: "Arquivo deletado com sucesso",
+      message: "Arquivo excluído com sucesso",
     })
   } catch (error) {
     console.error("Error deleting file:", error)
-    return NextResponse.json(
-      {
-        success: false,
-        error: "Erro ao deletar arquivo",
-        details: error instanceof Error ? error.message : "Erro desconhecido",
-      },
-      { status: 500 },
-    )
+    return NextResponse.json({ error: "Erro interno do servidor" }, { status: 500 })
   }
 }

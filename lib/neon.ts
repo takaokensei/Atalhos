@@ -145,19 +145,19 @@ export async function ensureTablesExist(): Promise<{ success: boolean; error?: s
       )
     `
 
-    // Create file_uploads table
+    // Create file_uploads table with proper data types
     await sql!`
       CREATE TABLE IF NOT EXISTS file_uploads (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           filename VARCHAR(255) NOT NULL,
           original_name VARCHAR(255) NOT NULL,
-          file_size BIGINT NOT NULL,
+          file_size BIGINT NOT NULL DEFAULT 0,
           mime_type VARCHAR(100) NOT NULL,
           file_extension VARCHAR(10) NOT NULL,
           storage_url TEXT NOT NULL,
           download_slug VARCHAR(100) UNIQUE NOT NULL,
           upload_date TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-          download_count INTEGER DEFAULT 0,
+          download_count INTEGER DEFAULT 0 NOT NULL,
           expires_at TIMESTAMP WITH TIME ZONE,
           is_active BOOLEAN DEFAULT true,
           metadata JSONB DEFAULT '{}',

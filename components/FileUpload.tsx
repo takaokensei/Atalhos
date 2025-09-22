@@ -1,302 +1,227 @@
 "use client"
 
-import type React from "react"
-import { useState, useCallback, useRef, useEffect } from "react"
-import { motion, AnimatePresence } from "framer-motion"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { useState, useCallback, useEffect } from "react"
+import { useDropzone } from "react-dropzone"
 import { Button } from "@/components/ui/button"
-import { Progress } from "@/components/ui/progress"
-import { Badge } from "@/components/ui/badge"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { toast } from "sonner"
+import { Badge } from "@/components/ui/badge"
+import { Progress } from "@/components/ui/progress"
 import {
   Upload,
-  FileIcon,
-  X,
-  CheckCircle,
-  AlertCircle,
+  File,
   Download,
-  Copy,
   Trash2,
-  RefreshCw,
-  FileArchive,
-  HardDrive,
-  Calendar,
-  Eye,
   Search,
+  HardDrive,
+  BarChart3,
+  Clock,
+  Copy,
+  Check,
+  AlertCircle,
+  RefreshCw,
 } from "lucide-react"
-import type { FileUpload, UploadProgress, FileStats } from "@/types/file-upload"
+import { toast } from "sonner"
+import { motion, AnimatePresence } from "framer-motion"
 
-const MAX_FILE_SIZE = 50 * 1024 * 1024 // 50MB
-const ALLOWED_TYPES = [".zip", ".rar", ".7z", ".tar", ".gz"]
-
-interface UploadingFile {
-  file: File
-  progress: UploadProgress
-  status: "uploading" | "success" | "error"
-  result?: any
-  error?: string
+interface FileData {
+  id: number
+  filename: string
+  original_name: string
+  file_size: number
+  mime_type: string
+  slug: string
+  blob_url: string
+  download_count: number
+  expires_at: string | null
+  created_at: string
+  updated_at: string
 }
 
-export default function FileUploader() {
-  const [uploadingFiles, setUploadingFiles] = useState<UploadingFile[]>([])
-  const [uploadedFiles, setUploadedFiles] = useState<FileUpload[]>([])
-  const [isDragOver, setIsDragOver] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
-  const [searchTerm, setSearchTerm] = useState("")
-  const [stats, setStats] = useState<FileStats>({
+interface Statistics {
+  totalFiles: number
+  totalSize: number
+  totalDownloads: number
+  recentFiles: number
+}
+
+interface FileUploadResponse {
+  files: FileData[]
+  statistics: Statistics
+}
+
+export default function FileUpload() {
+  const [files, setFiles] = useState<FileData[]>([])
+  const [statistics, setStatistics] = useState<Statistics>({
     totalFiles: 0,
     totalSize: 0,
     totalDownloads: 0,
-    recentUploads: 0,
+    recentFiles: 0,
   })
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [isUploading, setIsUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const [searchTerm, setSearchTerm] = useState("")
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [copiedSlug, setCopiedSlug] = useState<string | null>(null)
 
-  // Load uploaded files
-  const loadFiles = useCallback(async () => {
+  const fetchFiles = useCallback(async (search = "") => {
     try {
-      setIsLoading(true)
-      const response = await fetch("/api/files")
+      setError(null)
+      const response = await fetch(`/api/files?search=${encodeURIComponent(search)}`)
 
       if (!response.ok) {
-        const errorText = await response.text()
-        console.error("API Error Response:", errorText)
         throw new Error(`HTTP error! status: ${response.status}`)
       }
 
-      const data = await response.json()
-
-      if (data.success) {
-        setUploadedFiles(data.files || [])
-        setStats(
-          data.stats || {
-            totalFiles: 0,
-            totalSize: 0,
-            totalDownloads: 0,
-            recentUploads: 0,
-          },
-        )
-        console.log("Loaded files:", data.files?.length || 0)
-        console.log("Stats:", data.stats)
-      } else {
-        throw new Error(data.error || "Failed to load files")
-      }
+      const data: FileUploadResponse = await response.json()
+      setFiles(data.files || [])
+      setStatistics(
+        data.statistics || {
+          totalFiles: 0,
+          totalSize: 0,
+          totalDownloads: 0,
+          recentFiles: 0,
+        },
+      )
     } catch (error) {
       console.error("Error loading files:", error)
-      toast.error(`Erro ao carregar arquivos: ${error instanceof Error ? error.message : "Unknown error"}`)
-      // Set empty state on error
-      setUploadedFiles([])
-      setStats({
+      setError("Erro ao carregar arquivos. Tente novamente.")
+      setFiles([])
+      setStatistics({
         totalFiles: 0,
         totalSize: 0,
         totalDownloads: 0,
-        recentUploads: 0,
+        recentFiles: 0,
       })
     } finally {
       setIsLoading(false)
     }
   }, [])
 
-  // Load files on component mount
   useEffect(() => {
-    loadFiles()
-  }, [loadFiles])
+    fetchFiles()
+  }, [fetchFiles])
 
-  const validateFile = (file: File): string | null => {
-    if (file.size > MAX_FILE_SIZE) {
-      return `Arquivo muito grande. Máximo: ${MAX_FILE_SIZE / 1024 / 1024}MB`
-    }
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      fetchFiles(searchTerm)
+    }, 300)
 
-    const extension = "." + file.name.split(".").pop()?.toLowerCase()
-    if (!ALLOWED_TYPES.includes(extension)) {
-      return `Tipo não permitido. Permitidos: ${ALLOWED_TYPES.join(", ")}`
-    }
+    return () => clearTimeout(timeoutId)
+  }, [searchTerm, fetchFiles])
 
-    return null
-  }
+  const onDrop = useCallback(
+    async (acceptedFiles: File[]) => {
+      if (acceptedFiles.length === 0) return
 
-  const uploadFile = async (file: File): Promise<any> => {
-    const formData = new FormData()
-    formData.append("file", file)
+      const file = acceptedFiles[0]
 
-    return new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest()
-
-      xhr.upload.addEventListener("progress", (event) => {
-        if (event.lengthComputable) {
-          const progress = {
-            loaded: event.loaded,
-            total: event.total,
-            percentage: Math.round((event.loaded / event.total) * 100),
-          }
-
-          setUploadingFiles((prev) => prev.map((uf) => (uf.file === file ? { ...uf, progress } : uf)))
-        }
-      })
-
-      xhr.addEventListener("load", () => {
-        try {
-          if (xhr.status >= 200 && xhr.status < 300) {
-            const response = JSON.parse(xhr.responseText)
-            if (response.success) {
-              resolve(response)
-            } else {
-              reject(new Error(response.error || "Upload failed"))
-            }
-          } else {
-            let errorMessage = `Upload failed with status ${xhr.status}`
-            try {
-              const errorResponse = JSON.parse(xhr.responseText)
-              errorMessage = errorResponse.error || errorMessage
-            } catch {
-              // If response is not JSON, use status message
-            }
-            reject(new Error(errorMessage))
-          }
-        } catch (error) {
-          reject(new Error("Invalid response format"))
-        }
-      })
-
-      xhr.addEventListener("error", () => {
-        reject(new Error("Network error during upload"))
-      })
-
-      xhr.addEventListener("timeout", () => {
-        reject(new Error("Upload timeout"))
-      })
-
-      xhr.timeout = 5 * 60 * 1000 // 5 minutes
-      xhr.open("POST", "/api/upload")
-      xhr.send(formData)
-    })
-  }
-
-  const handleFiles = async (files: FileList) => {
-    const validFiles: File[] = []
-
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i]
-      const error = validateFile(file)
-
-      if (error) {
-        toast.error(`${file.name}: ${error}`)
-        continue
+      // Check file size (50MB limit)
+      if (file.size > 50 * 1024 * 1024) {
+        toast.error("Arquivo muito grande. Limite máximo: 50MB")
+        return
       }
 
-      validFiles.push(file)
-    }
+      setIsUploading(true)
+      setUploadProgress(0)
 
-    if (validFiles.length === 0) return
-
-    // Initialize uploading files
-    const newUploadingFiles: UploadingFile[] = validFiles.map((file) => ({
-      file,
-      progress: { loaded: 0, total: file.size, percentage: 0 },
-      status: "uploading",
-    }))
-
-    setUploadingFiles((prev) => [...prev, ...newUploadingFiles])
-
-    // Upload files concurrently
-    const uploadPromises = validFiles.map(async (file) => {
       try {
-        const result = await uploadFile(file)
+        const formData = new FormData()
+        formData.append("file", file)
 
-        setUploadingFiles((prev) => prev.map((uf) => (uf.file === file ? { ...uf, status: "success", result } : uf)))
+        // Simulate progress
+        const progressInterval = setInterval(() => {
+          setUploadProgress((prev) => {
+            if (prev >= 90) {
+              clearInterval(progressInterval)
+              return prev
+            }
+            return prev + 10
+          })
+        }, 200)
 
-        toast.success(`${file.name} enviado com sucesso!`)
-        return result
+        const response = await fetch("/api/upload", {
+          method: "POST",
+          body: formData,
+        })
+
+        clearInterval(progressInterval)
+        setUploadProgress(100)
+
+        if (!response.ok) {
+          const errorData = await response.json()
+          throw new Error(errorData.error || "Erro no upload")
+        }
+
+        const result = await response.json()
+
+        toast.success("Arquivo enviado com sucesso!")
+
+        // Refresh the files list
+        await fetchFiles(searchTerm)
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : "Upload failed"
-
-        setUploadingFiles((prev) =>
-          prev.map((uf) => (uf.file === file ? { ...uf, status: "error", error: errorMessage } : uf)),
-        )
-
-        toast.error(`Erro ao enviar ${file.name}: ${errorMessage}`)
-        throw error
+        console.error("Upload error:", error)
+        toast.error(error instanceof Error ? error.message : "Erro no upload do arquivo")
+      } finally {
+        setIsUploading(false)
+        setUploadProgress(0)
       }
-    })
+    },
+    [searchTerm, fetchFiles],
+  )
 
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    multiple: false,
+    maxSize: 50 * 1024 * 1024, // 50MB
+  })
+
+  const handleDelete = async (id: number) => {
     try {
-      await Promise.allSettled(uploadPromises)
-      // Reload files after uploads complete
-      await loadFiles()
-    } catch (error) {
-      console.error("Some uploads failed:", error)
-    }
-  }
-
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    setIsDragOver(false)
-    handleFiles(e.dataTransfer.files)
-  }, [])
-
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    setIsDragOver(true)
-  }, [])
-
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    setIsDragOver(false)
-  }, [])
-
-  const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      handleFiles(e.target.files)
-    }
-  }
-
-  const copyToClipboard = async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text)
-      toast.success("Link copiado!")
-    } catch (error) {
-      toast.error("Erro ao copiar link")
-    }
-  }
-
-  const deleteFile = async (id: string) => {
-    try {
-      const response = await fetch(`/api/files/${id}`, {
+      const response = await fetch(`/api/files?id=${id}`, {
         method: "DELETE",
       })
 
       if (!response.ok) {
-        throw new Error("Failed to delete file")
+        throw new Error("Erro ao excluir arquivo")
       }
 
-      const data = await response.json()
-
-      if (data.success) {
-        toast.success("Arquivo deletado com sucesso!")
-        await loadFiles()
-      } else {
-        throw new Error(data.error || "Delete failed")
-      }
+      toast.success("Arquivo excluído com sucesso!")
+      await fetchFiles(searchTerm)
     } catch (error) {
-      console.error("Error deleting file:", error)
-      toast.error("Erro ao deletar arquivo")
+      console.error("Delete error:", error)
+      toast.error("Erro ao excluir arquivo")
     }
   }
 
-  const clearCompleted = () => {
-    setUploadingFiles((prev) => prev.filter((uf) => uf.status === "uploading"))
+  const handleCopyLink = async (slug: string) => {
+    const link = `${window.location.origin}/download/${slug}`
+
+    try {
+      await navigator.clipboard.writeText(link)
+      setCopiedSlug(slug)
+      toast.success("Link copiado!")
+
+      setTimeout(() => setCopiedSlug(null), 2000)
+    } catch (error) {
+      console.error("Copy error:", error)
+      toast.error("Erro ao copiar link")
+    }
   }
 
   const formatFileSize = (bytes: number): string => {
     if (bytes === 0) return "0 B"
+
     const k = 1024
     const sizes = ["B", "KB", "MB", "GB", "TB"]
     const i = Math.floor(Math.log(bytes) / Math.log(k))
-    return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i]
+
+    return `${Number.parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`
   }
 
-  const formatDate = (date: string | Date): string => {
-    return new Date(date).toLocaleDateString("pt-BR", {
+  const formatDate = (dateString: string): string => {
+    return new Date(dateString).toLocaleDateString("pt-BR", {
       day: "2-digit",
       month: "2-digit",
       year: "numeric",
@@ -305,25 +230,40 @@ export default function FileUploader() {
     })
   }
 
-  const filteredFiles = uploadedFiles.filter(
-    (file) =>
-      file.originalName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      file.filename?.toLowerCase().includes(searchTerm.toLowerCase()),
-  )
+  const handleRetry = () => {
+    setIsLoading(true)
+    fetchFiles(searchTerm)
+  }
+
+  if (error && files.length === 0) {
+    return (
+      <div className="container mx-auto p-6 max-w-4xl">
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <AlertCircle className="h-12 w-12 text-destructive mb-4" />
+            <h3 className="text-lg font-semibold mb-2">Erro ao carregar arquivos</h3>
+            <p className="text-muted-foreground mb-4 text-center">{error}</p>
+            <Button onClick={handleRetry} variant="outline">
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Tentar novamente
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
 
   return (
-    <div className="space-y-6">
+    <div className="container mx-auto p-6 max-w-6xl space-y-6">
       {/* Statistics Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
           <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-500/10 rounded-lg">
-                <FileArchive className="h-5 w-5 text-blue-500" />
-              </div>
+            <div className="flex items-center space-x-2">
+              <File className="h-5 w-5 text-blue-500" />
               <div>
-                <p className="text-sm text-muted-foreground">Total de Arquivos</p>
-                <p className="text-2xl font-bold">{stats.totalFiles}</p>
+                <p className="text-sm font-medium">Total de Arquivos</p>
+                <p className="text-2xl font-bold">{statistics.totalFiles}</p>
               </div>
             </div>
           </CardContent>
@@ -331,13 +271,11 @@ export default function FileUploader() {
 
         <Card>
           <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-green-500/10 rounded-lg">
-                <HardDrive className="h-5 w-5 text-green-500" />
-              </div>
+            <div className="flex items-center space-x-2">
+              <HardDrive className="h-5 w-5 text-green-500" />
               <div>
-                <p className="text-sm text-muted-foreground">Espaço Usado</p>
-                <p className="text-2xl font-bold">{formatFileSize(stats.totalSize)}</p>
+                <p className="text-sm font-medium">Espaço Usado</p>
+                <p className="text-2xl font-bold">{formatFileSize(statistics.totalSize)}</p>
               </div>
             </div>
           </CardContent>
@@ -345,13 +283,11 @@ export default function FileUploader() {
 
         <Card>
           <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-purple-500/10 rounded-lg">
-                <Download className="h-5 w-5 text-purple-500" />
-              </div>
+            <div className="flex items-center space-x-2">
+              <BarChart3 className="h-5 w-5 text-purple-500" />
               <div>
-                <p className="text-sm text-muted-foreground">Total Downloads</p>
-                <p className="text-2xl font-bold">{stats.totalDownloads}</p>
+                <p className="text-sm font-medium">Total Downloads</p>
+                <p className="text-2xl font-bold">{statistics.totalDownloads}</p>
               </div>
             </div>
           </CardContent>
@@ -359,13 +295,11 @@ export default function FileUploader() {
 
         <Card>
           <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-orange-500/10 rounded-lg">
-                <Calendar className="h-5 w-5 text-orange-500" />
-              </div>
+            <div className="flex items-center space-x-2">
+              <Clock className="h-5 w-5 text-orange-500" />
               <div>
-                <p className="text-sm text-muted-foreground">Recentes (7d)</p>
-                <p className="text-2xl font-bold">{stats.recentUploads}</p>
+                <p className="text-sm font-medium">Recentes (7d)</p>
+                <p className="text-2xl font-bold">{statistics.recentFiles}</p>
               </div>
             </div>
           </CardContent>
@@ -379,214 +313,134 @@ export default function FileUploader() {
             <Upload className="h-5 w-5" />
             Upload de Arquivos
           </CardTitle>
-          <CardDescription>Faça upload de arquivos .zip, .rar, .7z, .tar, .gz (máx. 50MB cada)</CardDescription>
+          <CardDescription>Faça upload de arquivos até 50MB. Suporta todos os tipos de arquivo.</CardDescription>
         </CardHeader>
         <CardContent>
-          <motion.div
-            className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-              isDragOver ? "border-primary bg-primary/5" : "border-muted-foreground/25 hover:border-primary/50"
-            }`}
-            onDrop={handleDrop}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            whileHover={{ scale: 1.01 }}
-            whileTap={{ scale: 0.99 }}
+          <div
+            {...getRootProps()}
+            className={`
+              border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors
+              ${isDragActive ? "border-primary bg-primary/5" : "border-muted-foreground/25"}
+              ${isUploading ? "pointer-events-none opacity-50" : "hover:border-primary hover:bg-primary/5"}
+            `}
           >
-            <Upload className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg font-semibold mb-2">Arraste arquivos aqui ou clique para selecionar</h3>
-            <p className="text-muted-foreground mb-4">
-              Suporte para: {ALLOWED_TYPES.join(", ")} • Máx: {MAX_FILE_SIZE / 1024 / 1024}MB
-            </p>
-            <Button onClick={() => fileInputRef.current?.click()} variant="outline" className="gap-2">
-              <FileIcon className="h-4 w-4" />
-              Selecionar Arquivos
-            </Button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              accept={ALLOWED_TYPES.join(",")}
-              onChange={handleFileInput}
-              className="hidden"
-            />
-          </motion.div>
+            <input {...getInputProps()} />
+            <Upload className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+            {isDragActive ? (
+              <p className="text-lg">Solte o arquivo aqui...</p>
+            ) : (
+              <div>
+                <p className="text-lg mb-2">Clique ou arraste um arquivo aqui</p>
+                <p className="text-sm text-muted-foreground">Limite máximo: 50MB</p>
+              </div>
+            )}
+          </div>
+
+          {isUploading && (
+            <div className="mt-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium">Enviando arquivo...</span>
+                <span className="text-sm text-muted-foreground">{uploadProgress}%</span>
+              </div>
+              <Progress value={uploadProgress} className="w-full" />
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      {/* Upload Progress */}
-      <AnimatePresence>
-        {uploadingFiles.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-          >
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle className="text-lg">Progresso do Upload</CardTitle>
-                <Button variant="outline" size="sm" onClick={clearCompleted} className="gap-2 bg-transparent">
-                  <X className="h-4 w-4" />
-                  Limpar Concluídos
-                </Button>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {uploadingFiles.map((uploadingFile, index) => (
-                  <motion.div
-                    key={index}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="space-y-2"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        {uploadingFile.status === "uploading" && (
-                          <RefreshCw className="h-4 w-4 animate-spin text-blue-500" />
-                        )}
-                        {uploadingFile.status === "success" && <CheckCircle className="h-4 w-4 text-green-500" />}
-                        {uploadingFile.status === "error" && <AlertCircle className="h-4 w-4 text-red-500" />}
-                        <div>
-                          <p className="font-medium">{uploadingFile.file.name}</p>
-                          <p className="text-sm text-muted-foreground">{formatFileSize(uploadingFile.file.size)}</p>
-                        </div>
-                      </div>
-                      <Badge
-                        variant={
-                          uploadingFile.status === "success"
-                            ? "default"
-                            : uploadingFile.status === "error"
-                              ? "destructive"
-                              : "secondary"
-                        }
-                      >
-                        {uploadingFile.status === "uploading" && "Enviando..."}
-                        {uploadingFile.status === "success" && "Concluído"}
-                        {uploadingFile.status === "error" && "Erro"}
-                      </Badge>
-                    </div>
-                    {uploadingFile.status === "uploading" && (
-                      <Progress value={uploadingFile.progress.percentage} className="w-full" />
-                    )}
-                    {uploadingFile.status === "error" && uploadingFile.error && (
-                      <p className="text-sm text-red-500">{uploadingFile.error}</p>
-                    )}
-                    {uploadingFile.status === "success" && uploadingFile.result && (
-                      <div className="flex items-center gap-2">
-                        <Input value={uploadingFile.result.data?.downloadUrl || ""} readOnly className="text-sm" />
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => copyToClipboard(uploadingFile.result.data?.downloadUrl || "")}
-                        >
-                          <Copy className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    )}
-                  </motion.div>
-                ))}
-              </CardContent>
-            </Card>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Uploaded Files */}
+      {/* Search and Files List */}
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div>
-            <CardTitle>Arquivos Enviados ({uploadedFiles.length})</CardTitle>
-            <CardDescription>Gerencie seus arquivos enviados</CardDescription>
-          </div>
-          <div className="flex items-center gap-2">
+        <CardHeader>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <CardTitle>Arquivos Enviados</CardTitle>
+              <CardDescription>Gerencie seus arquivos enviados</CardDescription>
+            </div>
             <div className="relative">
-              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Buscar arquivos..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-8 w-64"
+                className="pl-10 w-full sm:w-64"
               />
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={loadFiles}
-              disabled={isLoading}
-              className="gap-2 bg-transparent"
-            >
-              <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
-              Atualizar
-            </Button>
           </div>
         </CardHeader>
         <CardContent>
           {isLoading ? (
-            <div className="text-center py-12">
-              <RefreshCw className="h-8 w-8 animate-spin text-primary mx-auto mb-4" />
-              <p className="text-muted-foreground">Carregando arquivos...</p>
+            <div className="space-y-4">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="animate-pulse">
+                  <div className="h-16 bg-muted rounded-lg"></div>
+                </div>
+              ))}
             </div>
-          ) : filteredFiles.length === 0 ? (
+          ) : files.length === 0 ? (
             <div className="text-center py-12">
-              <FileArchive className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-lg font-semibold mb-2">
-                {searchTerm ? "Nenhum arquivo encontrado" : "Nenhum arquivo ainda"}
-              </h3>
+              <File className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+              <h3 className="text-lg font-semibold mb-2">Nenhum arquivo encontrado</h3>
               <p className="text-muted-foreground">
-                {searchTerm ? "Tente uma busca diferente" : "Faça upload do seu primeiro arquivo para começar"}
+                {searchTerm ? "Tente uma busca diferente" : "Faça upload do seu primeiro arquivo"}
               </p>
             </div>
           ) : (
             <div className="space-y-4">
-              {filteredFiles.map((file) => (
-                <motion.div
-                  key={file.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="p-2 bg-primary/10 rounded-lg">
-                      <FileArchive className="h-5 w-5 text-primary" />
-                    </div>
-                    <div>
-                      <h4 className="font-medium">{file.originalName}</h4>
-                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                        <span>{formatFileSize(file.size)}</span>
-                        <span>{formatDate(file.createdAt)}</span>
-                        <div className="flex items-center gap-1">
-                          <Download className="h-3 w-3" />
-                          <span>{file.downloadCount} downloads</span>
+              <AnimatePresence>
+                {files.map((file) => (
+                  <motion.div
+                    key={file.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -20 }}
+                    className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
+                  >
+                    <div className="flex items-center space-x-4 flex-1 min-w-0">
+                      <div className="flex-shrink-0">
+                        <File className="h-8 w-8 text-muted-foreground" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium truncate">{file.original_name}</p>
+                        <div className="flex items-center space-x-4 text-sm text-muted-foreground">
+                          <span>{formatFileSize(file.file_size)}</span>
+                          <span>{file.download_count} downloads</span>
+                          <span>{formatDate(file.created_at)}</span>
                         </div>
                       </div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => copyToClipboard(`${window.location.origin}/download/${file.slug}`)}
-                      className="gap-2"
-                    >
-                      <Copy className="h-4 w-4" />
-                      Copiar Link
-                    </Button>
-                    <Button size="sm" variant="outline" asChild className="gap-2 bg-transparent">
-                      <a href={`/download/${file.slug}`} target="_blank" rel="noopener noreferrer">
-                        <Eye className="h-4 w-4" />
-                        Baixar
-                      </a>
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => deleteFile(file.id)}
-                      className="gap-2 text-red-600 hover:text-red-700"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      Deletar
-                    </Button>
-                  </div>
-                </motion.div>
-              ))}
+
+                    <div className="flex items-center space-x-2 flex-shrink-0">
+                      <Badge variant="secondary" className="hidden sm:inline-flex">
+                        /{file.slug}
+                      </Badge>
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleCopyLink(file.slug)}
+                        className="hidden sm:inline-flex"
+                      >
+                        {copiedSlug === file.slug ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                      </Button>
+
+                      <Button variant="outline" size="sm" asChild>
+                        <a href={`/download/${file.slug}`} target="_blank" rel="noopener noreferrer">
+                          <Download className="h-4 w-4" />
+                        </a>
+                      </Button>
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleDelete(file.id)}
+                        className="text-destructive hover:text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
             </div>
           )}
         </CardContent>

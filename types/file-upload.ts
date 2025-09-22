@@ -3,14 +3,15 @@ export interface FileUpload {
   filename: string
   originalName: string
   size: number
-  mimeType: string
+  mimeType?: string
+  fileExtension: string
   slug: string
-  blobUrl: string
   downloadCount: number
-  expiresAt?: Date
-  createdAt: Date
-  updatedAt: Date
-  isActive: boolean
+  uploadDate: string
+  createdAt: string
+  updatedAt: string
+  expiresAt?: string
+  isActive?: boolean
 }
 
 export interface FileUploadResponse {
@@ -58,9 +59,8 @@ export interface UploadResponse {
   data?: {
     id: string
     slug: string
-    filename: string
-    size: number
     downloadUrl: string
+    filename: string
   }
   error?: string
 }

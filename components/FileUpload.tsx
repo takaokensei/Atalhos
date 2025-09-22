@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useCallback, useRef } from "react"
+import { useState, useCallback, useRef, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -51,13 +51,15 @@ export default function FileUploader() {
   })
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // Load uploaded files on mount
+  // Load uploaded files
   const loadFiles = useCallback(async () => {
     try {
       setIsLoading(true)
       const response = await fetch("/api/files")
 
       if (!response.ok) {
+        const errorText = await response.text()
+        console.error("API Error Response:", errorText)
         throw new Error(`HTTP error! status: ${response.status}`)
       }
 
@@ -78,16 +80,16 @@ export default function FileUploader() {
       }
     } catch (error) {
       console.error("Error loading files:", error)
-      toast.error("Erro ao carregar arquivos")
+      toast.error(`Erro ao carregar arquivos: ${error instanceof Error ? error.message : "Unknown error"}`)
     } finally {
       setIsLoading(false)
     }
   }, [])
 
   // Load files on component mount
-  useState(() => {
+  useEffect(() => {
     loadFiles()
-  })
+  }, [loadFiles])
 
   const validateFile = (file: File): string | null => {
     if (file.size > MAX_FILE_SIZE) {
@@ -125,9 +127,20 @@ export default function FileUploader() {
         try {
           if (xhr.status >= 200 && xhr.status < 300) {
             const response = JSON.parse(xhr.responseText)
-            resolve(response)
+            if (response.success) {
+              resolve(response)
+            } else {
+              reject(new Error(response.error || "Upload failed"))
+            }
           } else {
-            reject(new Error(`Upload failed with status ${xhr.status}`))
+            let errorMessage = `Upload failed with status ${xhr.status}`
+            try {
+              const errorResponse = JSON.parse(xhr.responseText)
+              errorMessage = errorResponse.error || errorMessage
+            } catch {
+              // If response is not JSON, use status message
+            }
+            reject(new Error(errorMessage))
           }
         } catch (error) {
           reject(new Error("Invalid response format"))

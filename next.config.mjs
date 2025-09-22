@@ -3,7 +3,28 @@ const nextConfig = {
   // Performance optimizations
   experimental: {
     optimizePackageImports: ['lucide-react', '@radix-ui/react-icons'],
+    turbo: {
+      rules: {
+        '*.svg': {
+          loaders: ['@svgr/webpack'],
+          as: '*.js',
+        },
+      },
+    },
   },
+
+  // Bundle analyzer
+  ...(process.env.ANALYZE === 'true' && {
+    webpack: (config, { isServer }) => {
+      if (!isServer) {
+        const { BundleAnalyzerPlugin } = require('@next/bundle-analyzer')({
+          enabled: true,
+        })
+        config.plugins.push(new BundleAnalyzerPlugin())
+      }
+      return config
+    },
+  }),
 
   // Security headers
   async headers() {
@@ -60,6 +81,9 @@ const nextConfig = {
   // React strict mode
   reactStrictMode: true,
 
+  // SWC minification
+  swcMinify: true,
+
   // Environment variables validation
   env: {
     CUSTOM_KEY: process.env.CUSTOM_KEY,
@@ -72,6 +96,9 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
+
+  // Font optimization configuration
+  optimizeFonts: true,
 }
 
 export default nextConfig

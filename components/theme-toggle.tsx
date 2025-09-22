@@ -25,3 +25,6 @@ export function ThemeToggle() {
     </DropdownMenu>
   )
 }
+
+// Default export for compatibility
+export default ThemeToggle

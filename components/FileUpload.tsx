@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useState, useCallback, useRef, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -24,10 +23,11 @@ import {
   HardDrive,
   Calendar,
   Eye,
+  Search,
 } from "lucide-react"
 import type { FileUpload, UploadProgress, FileStats } from "@/types/file-upload"
 
-const MAX_FILE_SIZE = 100 * 1024 * 1024 // 100MB
+const MAX_FILE_SIZE = 50 * 1024 * 1024 // 50MB
 const ALLOWED_TYPES = [".zip", ".rar", ".7z", ".tar", ".gz"]
 
 interface UploadingFile {
@@ -43,6 +43,7 @@ export default function FileUploader() {
   const [uploadedFiles, setUploadedFiles] = useState<FileUpload[]>([])
   const [isDragOver, setIsDragOver] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [searchTerm, setSearchTerm] = useState("")
   const [stats, setStats] = useState<FileStats>({
     totalFiles: 0,
     totalSize: 0,
@@ -75,12 +76,22 @@ export default function FileUploader() {
             recentUploads: 0,
           },
         )
+        console.log("Loaded files:", data.files?.length || 0)
+        console.log("Stats:", data.stats)
       } else {
         throw new Error(data.error || "Failed to load files")
       }
     } catch (error) {
       console.error("Error loading files:", error)
       toast.error(`Erro ao carregar arquivos: ${error instanceof Error ? error.message : "Unknown error"}`)
+      // Set empty state on error
+      setUploadedFiles([])
+      setStats({
+        totalFiles: 0,
+        totalSize: 0,
+        totalDownloads: 0,
+        recentUploads: 0,
+      })
     } finally {
       setIsLoading(false)
     }
@@ -277,11 +288,11 @@ export default function FileUploader() {
   }
 
   const formatFileSize = (bytes: number): string => {
-    if (bytes === 0) return "0 Bytes"
+    if (bytes === 0) return "0 B"
     const k = 1024
-    const sizes = ["Bytes", "KB", "MB", "GB"]
+    const sizes = ["B", "KB", "MB", "GB", "TB"]
     const i = Math.floor(Math.log(bytes) / Math.log(k))
-    return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
+    return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i]
   }
 
   const formatDate = (date: string | Date): string => {
@@ -294,9 +305,15 @@ export default function FileUploader() {
     })
   }
 
+  const filteredFiles = uploadedFiles.filter(
+    (file) =>
+      file.originalName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      file.filename?.toLowerCase().includes(searchTerm.toLowerCase()),
+  )
+
   return (
     <div className="space-y-6">
-      {/* Stats Cards */}
+      {/* Statistics Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
           <CardContent className="p-4">
@@ -362,7 +379,7 @@ export default function FileUploader() {
             <Upload className="h-5 w-5" />
             Upload de Arquivos
           </CardTitle>
-          <CardDescription>Faça upload de arquivos .zip, .rar, .7z, .tar, .gz (máx. 100MB cada)</CardDescription>
+          <CardDescription>Faça upload de arquivos .zip, .rar, .7z, .tar, .gz (máx. 50MB cada)</CardDescription>
         </CardHeader>
         <CardContent>
           <motion.div
@@ -479,21 +496,47 @@ export default function FileUploader() {
             <CardTitle>Arquivos Enviados ({uploadedFiles.length})</CardTitle>
             <CardDescription>Gerencie seus arquivos enviados</CardDescription>
           </div>
-          <Button variant="outline" size="sm" onClick={loadFiles} disabled={isLoading} className="gap-2 bg-transparent">
-            <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
-            Atualizar
-          </Button>
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar arquivos..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-8 w-64"
+              />
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={loadFiles}
+              disabled={isLoading}
+              className="gap-2 bg-transparent"
+            >
+              <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
+              Atualizar
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
-          {uploadedFiles.length === 0 ? (
+          {isLoading ? (
+            <div className="text-center py-12">
+              <RefreshCw className="h-8 w-8 animate-spin text-primary mx-auto mb-4" />
+              <p className="text-muted-foreground">Carregando arquivos...</p>
+            </div>
+          ) : filteredFiles.length === 0 ? (
             <div className="text-center py-12">
               <FileArchive className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-lg font-semibold mb-2">Nenhum arquivo ainda</h3>
-              <p className="text-muted-foreground">Faça upload do seu primeiro arquivo para começar</p>
+              <h3 className="text-lg font-semibold mb-2">
+                {searchTerm ? "Nenhum arquivo encontrado" : "Nenhum arquivo ainda"}
+              </h3>
+              <p className="text-muted-foreground">
+                {searchTerm ? "Tente uma busca diferente" : "Faça upload do seu primeiro arquivo para começar"}
+              </p>
             </div>
           ) : (
             <div className="space-y-4">
-              {uploadedFiles.map((file) => (
+              {filteredFiles.map((file) => (
                 <motion.div
                   key={file.id}
                   initial={{ opacity: 0, y: 20 }}

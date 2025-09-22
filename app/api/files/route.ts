@@ -1,100 +1,155 @@
-import { NextResponse } from "next/server"
-import { sql, isNeonAvailable, getNeonError } from "@/lib/neon"
+import { type NextRequest, NextResponse } from "next/server"
+import { neon } from "@neondatabase/serverless"
 
-export async function GET() {
+const sql = neon(process.env.DATABASE_URL!)
+
+function formatFileSize(bytes: number): string {
+  if (bytes === 0) return "0 B"
+
+  const k = 1024
+  const sizes = ["B", "KB", "MB", "GB", "TB"]
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+
+  return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
+}
+
+export async function GET(request: NextRequest) {
   try {
-    if (!isNeonAvailable()) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: getNeonError() || "Database not available",
-        },
-        { status: 500 },
-      )
-    }
+    const { searchParams } = new URL(request.url)
+    const page = Number.parseInt(searchParams.get("page") || "1")
+    const limit = Number.parseInt(searchParams.get("limit") || "10")
+    const search = searchParams.get("search") || ""
+    const offset = (page - 1) * limit
 
-    // Check if deleted_at column exists
-    const columnCheck = await sql!`
-      SELECT column_name 
-      FROM information_schema.columns 
-      WHERE table_name = 'file_uploads' 
-      AND column_name IN ('deleted_at', 'is_active')
-    `
-
-    const hasDeletedAt = columnCheck.some((col: any) => col.column_name === "deleted_at")
-    const hasIsActive = columnCheck.some((col: any) => col.column_name === "is_active")
-
-    // Build query based on available columns
-    let whereClause = "1=1"
-    if (hasDeletedAt) {
-      whereClause += " AND deleted_at IS NULL"
-    }
-    if (hasIsActive) {
-      whereClause += " AND is_active = true"
-    }
-
-    // Get files with dynamic where clause
-    const files = await sql!`
+    // Get files with search filter
+    let filesQuery = `
       SELECT 
-        id,
-        filename,
-        original_name,
-        file_size,
-        mime_type,
-        file_extension,
-        storage_url,
-        download_slug,
-        upload_date,
-        download_count,
+        id, 
+        filename, 
+        original_filename, 
+        file_size::bigint as file_size, 
+        mime_type, 
+        download_count::integer as download_count, 
+        created_at, 
         expires_at,
-        created_at,
-        updated_at
+        slug
       FROM file_uploads 
-      WHERE ${sql!.unsafe(whereClause)}
-      ORDER BY created_at DESC
+      WHERE 1=1
     `
 
-    // Calculate stats
-    const stats = {
-      totalFiles: files.length,
-      totalSize: files.reduce((sum: number, file: any) => sum + (file.file_size || 0), 0),
-      totalDownloads: files.reduce((sum: number, file: any) => sum + (file.download_count || 0), 0),
-      recentUploads: files.filter((file: any) => {
-        const uploadDate = new Date(file.created_at || file.upload_date)
-        const weekAgo = new Date()
-        weekAgo.setDate(weekAgo.getDate() - 7)
-        return uploadDate > weekAgo
-      }).length,
+    const queryParams: any[] = []
+    let paramIndex = 1
+
+    if (search) {
+      filesQuery += ` AND (original_filename ILIKE $${paramIndex} OR slug ILIKE $${paramIndex})`
+      queryParams.push(`%${search}%`)
+      paramIndex++
     }
 
-    // Format files for frontend
+    filesQuery += ` ORDER BY created_at DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`
+    queryParams.push(limit, offset)
+
+    const files = await sql(filesQuery, queryParams)
+
+    // Get total count for pagination
+    let countQuery = `SELECT COUNT(*) as total FROM file_uploads WHERE 1=1`
+    const countParams: any[] = []
+
+    if (search) {
+      countQuery += ` AND (original_filename ILIKE $1 OR slug ILIKE $1)`
+      countParams.push(`%${search}%`)
+    }
+
+    const [{ total }] = await sql(countQuery, countParams)
+
+    // Get statistics with proper type casting
+    const statsQuery = `
+      SELECT 
+        COUNT(*)::integer as total_files,
+        COALESCE(SUM(CAST(file_size AS BIGINT)), 0) as total_size,
+        COALESCE(SUM(CAST(download_count AS INTEGER)), 0) as total_downloads,
+        COUNT(CASE WHEN created_at >= NOW() - INTERVAL '7 days' THEN 1 END)::integer as recent_files
+      FROM file_uploads
+      WHERE expires_at IS NULL OR expires_at > NOW()
+    `
+
+    const [stats] = await sql(statsQuery)
+
+    // Format the response
     const formattedFiles = files.map((file: any) => ({
-      id: file.id,
-      filename: file.filename,
-      originalName: file.original_name,
-      size: file.file_size,
-      mimeType: file.mime_type,
-      extension: file.file_extension,
-      storageUrl: file.storage_url,
-      slug: file.download_slug,
-      uploadDate: file.upload_date,
-      downloadCount: file.download_count || 0,
-      expiresAt: file.expires_at,
-      createdAt: file.created_at,
-      updatedAt: file.updated_at,
+      ...file,
+      file_size: Number.parseInt(file.file_size) || 0,
+      download_count: Number.parseInt(file.download_count) || 0,
+      formatted_size: formatFileSize(Number.parseInt(file.file_size) || 0),
+      created_at: new Date(file.created_at).toISOString(),
+      expires_at: file.expires_at ? new Date(file.expires_at).toISOString() : null,
     }))
+
+    const formattedStats = {
+      total_files: Number.parseInt(stats.total_files) || 0,
+      total_size: Number.parseInt(stats.total_size) || 0,
+      formatted_total_size: formatFileSize(Number.parseInt(stats.total_size) || 0),
+      total_downloads: Number.parseInt(stats.total_downloads) || 0,
+      recent_files: Number.parseInt(stats.recent_files) || 0,
+    }
 
     return NextResponse.json({
       success: true,
       files: formattedFiles,
-      stats,
+      pagination: {
+        page,
+        limit,
+        total: Number.parseInt(total),
+        pages: Math.ceil(Number.parseInt(total) / limit),
+      },
+      stats: formattedStats,
     })
   } catch (error) {
-    console.error("Files API error:", error)
+    console.error("Error fetching files:", error)
     return NextResponse.json(
       {
         success: false,
-        error: `Failed to fetch files: ${error instanceof Error ? error.message : "Unknown error"}`,
+        error: "Erro interno do servidor",
+        details: error instanceof Error ? error.message : "Erro desconhecido",
+      },
+      { status: 500 },
+    )
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url)
+    const id = searchParams.get("id")
+
+    if (!id) {
+      return NextResponse.json({ success: false, error: "ID do arquivo é obrigatório" }, { status: 400 })
+    }
+
+    // Get file info before deletion
+    const [file] = await sql("SELECT filename FROM file_uploads WHERE id = $1", [id])
+
+    if (!file) {
+      return NextResponse.json({ success: false, error: "Arquivo não encontrado" }, { status: 404 })
+    }
+
+    // Delete from database
+    await sql("DELETE FROM file_uploads WHERE id = $1", [id])
+
+    // Note: In a production environment, you would also delete the file from Vercel Blob here
+    // await del(file.filename)
+
+    return NextResponse.json({
+      success: true,
+      message: "Arquivo deletado com sucesso",
+    })
+  } catch (error) {
+    console.error("Error deleting file:", error)
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Erro ao deletar arquivo",
+        details: error instanceof Error ? error.message : "Erro desconhecido",
       },
       { status: 500 },
     )

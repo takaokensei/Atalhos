@@ -26,4 +26,5 @@ export function ThemeToggle() {
   )
 }
 
+// Default export for compatibility
 export default ThemeToggle

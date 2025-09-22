@@ -1,19 +1,16 @@
 export interface FileUpload {
   id: string
   filename: string
-  original_name: string
-  file_size: number
-  mime_type: string
-  file_extension: string
-  storage_url: string
-  download_slug: string
-  upload_date: string
-  download_count: number
-  expires_at?: string
-  is_active: boolean
-  metadata: Record<string, any>
-  created_at: string
-  updated_at: string
+  originalName: string
+  size: number
+  mimeType: string
+  slug: string
+  blobUrl: string
+  downloadCount: number
+  expiresAt?: Date
+  createdAt: Date
+  updatedAt: Date
+  isActive: boolean
 }
 
 export interface FileUploadResponse {
@@ -27,19 +24,27 @@ export interface FileListResponse {
   success: boolean
   files?: FileUpload[]
   error?: string
-  total?: number
+  pagination?: {
+    page: number
+    limit: number
+    total: number
+    totalPages: number
+    hasNext: boolean
+    hasPrev: boolean
+  }
 }
 
 export interface FileDeleteResponse {
   success: boolean
   error?: string
+  message?: string
 }
 
 export interface FileStats {
   totalFiles: number
   totalSize: number
   totalDownloads: number
-  activeFiles: number
+  recentUploads: number
 }
 
 export interface UploadProgress {
@@ -48,8 +53,21 @@ export interface UploadProgress {
   percentage: number
 }
 
+export interface UploadResponse {
+  success: boolean
+  data?: {
+    id: string
+    slug: string
+    filename: string
+    size: number
+    downloadUrl: string
+  }
+  error?: string
+}
+
 export const ALLOWED_FILE_TYPES = [".zip", ".rar"] as const
 export const MAX_FILE_SIZE = 100 * 1024 * 1024 // 100MB
+
 export const MIME_TYPES = {
   ".zip": ["application/zip", "application/x-zip-compressed"],
   ".rar": ["application/vnd.rar", "application/x-rar-compressed"],

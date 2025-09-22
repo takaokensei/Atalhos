@@ -4,8 +4,8 @@ import type React from "react"
 import { useState, useEffect, useRef } from "react"
 import { useSearchParams } from "next/navigation"
 import { motion, AnimatePresence, useScroll, useTransform } from "framer-motion"
-import type { LinkItem, SlugSuggestion } from "../src/types"
-import { useGeminiSuggestions } from "../src/hooks/useGeminiSuggestions"
+import type { LinkItem, SlugSuggestion } from "../types"
+import { useGeminiSuggestions } from "../hooks/useGeminiSuggestions"
 import { useLinkSync } from "../hooks/useLinkSync"
 import ModernLinkInput from "../components/ModernLinkInput"
 import AnimatedSuggestions from "../components/AnimatedSuggestions"
@@ -83,7 +83,7 @@ export default function Home() {
   const y = useTransform(scrollYProgress, [0, 1], [0, -50])
   const opacity = useTransform(scrollYProgress, [0, 0.5], [1, 0])
 
-  // Use the sync system
+  // Use the sync system - now correctly destructured
   const { links, syncStatus, addLink, editLink, removeLink, checkSlugExists, manualSync } = useLinkSync()
   const { getSuggestions, loading, error } = useGeminiSuggestions()
 

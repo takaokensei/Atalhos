@@ -1,68 +1,84 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { sql } from "@/lib/neon"
+import { neon } from "@neondatabase/serverless"
+
+const sql = neon(process.env.DATABASE_URL!)
 
 export async function GET(request: NextRequest) {
   try {
-    if (!sql) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Database not configured",
-        },
-        { status: 500 },
-      )
-    }
-
     const { searchParams } = new URL(request.url)
+    const page = Number.parseInt(searchParams.get("page") || "1")
+    const limit = Number.parseInt(searchParams.get("limit") || "10")
     const search = searchParams.get("search") || ""
-    const limit = Number.parseInt(searchParams.get("limit") || "50")
-    const offset = Number.parseInt(searchParams.get("offset") || "0")
 
-    let query
-    let countQuery
+    const offset = (page - 1) * limit
+
+    let whereClause = "WHERE deleted_at IS NULL"
+    let searchValue = ""
 
     if (search) {
-      query = sql`
-        SELECT * FROM file_uploads 
-        WHERE is_active = true 
-          AND (original_name ILIKE ${`%${search}%`} OR filename ILIKE ${`%${search}%`})
-        ORDER BY upload_date DESC 
-        LIMIT ${limit} OFFSET ${offset}
-      `
-      countQuery = sql`
-        SELECT COUNT(*) as total FROM file_uploads 
-        WHERE is_active = true 
-          AND (original_name ILIKE ${`%${search}%`} OR filename ILIKE ${`%${search}%`})
-      `
-    } else {
-      query = sql`
-        SELECT * FROM file_uploads 
-        WHERE is_active = true 
-        ORDER BY upload_date DESC 
-        LIMIT ${limit} OFFSET ${offset}
-      `
-      countQuery = sql`
-        SELECT COUNT(*) as total FROM file_uploads 
-        WHERE is_active = true
-      `
+      whereClause += " AND (original_name ILIKE $1 OR filename ILIKE $1)"
+      searchValue = `%${search}%`
     }
 
-    const [files, countResult] = await Promise.all([query, countQuery])
-    const total = countResult[0]?.total || 0
+    // Get files with pagination
+    const filesQuery = searchValue
+      ? sql`
+          SELECT * FROM file_uploads 
+          WHERE deleted_at IS NULL 
+          AND (original_name ILIKE ${searchValue} OR filename ILIKE ${searchValue})
+          ORDER BY created_at DESC 
+          LIMIT ${limit} OFFSET ${offset}
+        `
+      : sql`
+          SELECT * FROM file_uploads 
+          WHERE deleted_at IS NULL 
+          ORDER BY created_at DESC 
+          LIMIT ${limit} OFFSET ${offset}
+        `
+
+    // Get total count
+    const countQuery = searchValue
+      ? sql`
+          SELECT COUNT(*) as total FROM file_uploads 
+          WHERE deleted_at IS NULL 
+          AND (original_name ILIKE ${searchValue} OR filename ILIKE ${searchValue})
+        `
+      : sql`
+          SELECT COUNT(*) as total FROM file_uploads 
+          WHERE deleted_at IS NULL
+        `
+
+    const [files, countResult] = await Promise.all([filesQuery, countQuery])
+
+    const total = Number.parseInt(countResult[0].total)
+    const totalPages = Math.ceil(total / limit)
 
     return NextResponse.json({
       success: true,
-      files,
-      total: Number.parseInt(total),
+      files: files.map((file) => ({
+        id: file.id,
+        filename: file.filename,
+        originalName: file.original_name,
+        fileSize: file.file_size,
+        fileExtension: file.file_extension,
+        downloadSlug: file.download_slug,
+        downloadCount: file.download_count || 0,
+        uploadDate: file.upload_date,
+        createdAt: file.created_at,
+        updatedAt: file.updated_at,
+        expiresAt: file.expires_at,
+      })),
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasNext: page < totalPages,
+        hasPrev: page > 1,
+      },
     })
   } catch (error) {
-    console.error("Files fetch error:", error)
-    return NextResponse.json(
-      {
-        success: false,
-        error: "Failed to fetch files",
-      },
-      { status: 500 },
-    )
+    console.error("Files API error:", error)
+    return NextResponse.json({ success: false, error: "Erro interno do servidor" }, { status: 500 })
   }
 }

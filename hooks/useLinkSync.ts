@@ -99,6 +99,23 @@ export function useLinkSync() {
     }
   }
 
+  const syncLinks = useCallback(async (linksToSync: LinkItem[]) => {
+    // This function syncs provided links with the database
+    try {
+      setSyncStatus((prev) => ({ ...prev, syncing: true, error: null }))
+
+      for (const link of linksToSync) {
+        await saveLink(link)
+      }
+
+      updateLastSync()
+      setSyncStatus((prev) => ({ ...prev, syncing: false }))
+    } catch (error) {
+      console.error("Error syncing links:", error)
+      setSyncStatus((prev) => ({ ...prev, syncing: false, error: "Sync failed" }))
+    }
+  }, [])
+
   const addLink = async (newLink: LinkItem): Promise<{ success: boolean; error?: string }> => {
     try {
       // Add to local state immediately for responsive UI
@@ -191,6 +208,7 @@ export function useLinkSync() {
   return {
     links,
     syncStatus,
+    syncLinks, // This is the function that was missing
     addLink,
     editLink,
     removeLink,

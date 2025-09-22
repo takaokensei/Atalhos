@@ -1,24 +1,26 @@
--- Add missing columns to file_uploads table
-ALTER TABLE file_uploads 
-ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP DEFAULT NULL;
-
--- Update existing records to have proper structure
-UPDATE file_uploads 
-SET deleted_at = NULL 
-WHERE deleted_at IS NULL;
-
--- Ensure all required columns exist with proper types
-ALTER TABLE file_uploads 
-ALTER COLUMN mime_type SET DEFAULT 'application/octet-stream',
-ALTER COLUMN file_extension SET DEFAULT 'bin',
-ALTER COLUMN download_count SET DEFAULT 0,
-ALTER COLUMN is_active SET DEFAULT true,
-ALTER COLUMN metadata SET DEFAULT '{}';
-
--- Create missing indexes
-CREATE INDEX IF NOT EXISTS idx_file_uploads_deleted_at ON file_uploads(deleted_at);
-CREATE INDEX IF NOT EXISTS idx_file_uploads_is_active ON file_uploads(is_active);
-CREATE INDEX IF NOT EXISTS idx_file_uploads_expires_at ON file_uploads(expires_at);
+-- Add missing columns to file_uploads table if they don't exist
+DO $$ 
+BEGIN
+    -- Add deleted_at column if it doesn't exist
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                   WHERE table_name = 'file_uploads' AND column_name = 'deleted_at') THEN
+        ALTER TABLE file_uploads ADD COLUMN deleted_at TIMESTAMP WITH TIME ZONE;
+    END IF;
+    
+    -- Add is_active column if it doesn't exist
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                   WHERE table_name = 'file_uploads' AND column_name = 'is_active') THEN
+        ALTER TABLE file_uploads ADD COLUMN is_active BOOLEAN DEFAULT true;
+    END IF;
+    
+    -- Update existing records to have is_active = true
+    UPDATE file_uploads SET is_active = true WHERE is_active IS NULL;
+    
+    -- Create indexes if they don't exist
+    CREATE INDEX IF NOT EXISTS idx_file_uploads_deleted_at ON file_uploads(deleted_at);
+    CREATE INDEX IF NOT EXISTS idx_file_uploads_is_active ON file_uploads(is_active);
+    
+END $$;
 
 -- Verify the schema
 SELECT column_name, data_type, is_nullable, column_default 

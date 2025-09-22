@@ -454,17 +454,11 @@ export default function FileUploader() {
                     )}
                     {uploadingFile.status === "success" && uploadingFile.result && (
                       <div className="flex items-center gap-2">
-                        <Input
-                          value={`${window.location.origin}/download/${uploadingFile.result.data?.slug}`}
-                          readOnly
-                          className="text-sm"
-                        />
+                        <Input value={uploadingFile.result.data?.downloadUrl || ""} readOnly className="text-sm" />
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() =>
-                            copyToClipboard(`${window.location.origin}/download/${uploadingFile.result.data?.slug}`)
-                          }
+                          onClick={() => copyToClipboard(uploadingFile.result.data?.downloadUrl || "")}
                         >
                           <Copy className="h-4 w-4" />
                         </Button>
@@ -535,7 +529,7 @@ export default function FileUploader() {
                     <Button size="sm" variant="outline" asChild className="gap-2 bg-transparent">
                       <a href={`/download/${file.slug}`} target="_blank" rel="noopener noreferrer">
                         <Eye className="h-4 w-4" />
-                        Visualizar
+                        Baixar
                       </a>
                     </Button>
                     <Button

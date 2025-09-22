@@ -3,15 +3,15 @@ export interface FileUpload {
   filename: string
   originalName: string
   size: number
-  mimeType?: string
-  fileExtension: string
+  mimeType: string
+  extension: string
+  storageUrl: string
   slug: string
-  downloadCount: number
   uploadDate: string
+  downloadCount: number
+  expiresAt?: string | null
   createdAt: string
   updatedAt: string
-  expiresAt?: string
-  isActive?: boolean
 }
 
 export interface FileUploadResponse {
@@ -56,13 +56,13 @@ export interface UploadProgress {
 
 export interface UploadResponse {
   success: boolean
+  error?: string
   data?: {
     id: string
     slug: string
     downloadUrl: string
-    filename: string
+    file: FileUpload
   }
-  error?: string
 }
 
 export const ALLOWED_FILE_TYPES = [".zip", ".rar"] as const

@@ -1,44 +1,96 @@
-import { redirect } from "next/navigation"
-import { neon } from "@neondatabase/serverless"
+import type { Metadata } from "next"
+import { notFound, redirect } from "next/navigation"
+import { sql, isNeonAvailable } from "@/lib/neon"
 
-const sql = neon(process.env.DATABASE_URL!)
-
-interface PageProps {
-  params: {
-    slug: string
-  }
+interface DownloadPageProps {
+  params: { slug: string }
 }
 
-export default async function DownloadPage({ params }: PageProps) {
+async function getFileBySlug(slug: string) {
+  if (!isNeonAvailable()) {
+    return null
+  }
+
   try {
-    // Find the file in database
-    const result = await sql`
+    // Check if deleted_at column exists
+    const columnCheck = await sql!`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'file_uploads' 
+      AND column_name IN ('deleted_at', 'is_active')
+    `
+
+    const hasDeletedAt = columnCheck.some((col: any) => col.column_name === "deleted_at")
+    const hasIsActive = columnCheck.some((col: any) => col.column_name === "is_active")
+
+    // Build query based on available columns
+    let whereClause = `download_slug = '${slug}'`
+    if (hasDeletedAt) {
+      whereClause += " AND deleted_at IS NULL"
+    }
+    if (hasIsActive) {
+      whereClause += " AND is_active = true"
+    }
+
+    const result = await sql!`
       SELECT * FROM file_uploads 
-      WHERE download_slug = ${params.slug}
+      WHERE ${sql!.unsafe(whereClause)}
       LIMIT 1
     `
 
     if (result.length === 0) {
-      redirect("/not-found")
+      return null
     }
 
     const file = result[0]
 
-    // Increment download count
-    await sql`
+    // Check if file has expired
+    if (file.expires_at && new Date(file.expires_at) < new Date()) {
+      return null
+    }
+
+    return file
+  } catch (error) {
+    console.error("Error fetching file:", error)
+    return null
+  }
+}
+
+export async function generateMetadata({ params }: DownloadPageProps): Promise<Metadata> {
+  const file = await getFileBySlug(params.slug)
+
+  if (!file) {
+    return {
+      title: "Arquivo não encontrado",
+      description: "O arquivo solicitado não foi encontrado ou expirou.",
+    }
+  }
+
+  return {
+    title: `Download: ${file.original_name}`,
+    description: `Baixar arquivo ${file.original_name} (${Math.round((file.file_size / 1024 / 1024) * 100) / 100} MB)`,
+  }
+}
+
+export default async function DownloadPage({ params }: DownloadPageProps) {
+  const file = await getFileBySlug(params.slug)
+
+  if (!file) {
+    notFound()
+  }
+
+  // Increment download count
+  try {
+    await sql!`
       UPDATE file_uploads 
-      SET download_count = download_count + 1,
+      SET download_count = COALESCE(download_count, 0) + 1,
           updated_at = NOW()
       WHERE id = ${file.id}
     `
-
-    // Redirect to success page with file info
-    const successUrl = `/download/${params.slug}/success?filename=${encodeURIComponent(file.original_name)}&size=${file.file_size}&type=${encodeURIComponent(file.mime_type)}`
-
-    // Redirect to the actual file for download
-    redirect(file.storage_url)
   } catch (error) {
-    console.error("Download error:", error)
-    redirect("/not-found")
+    console.error("Error updating download count:", error)
   }
+
+  // Redirect to the actual file
+  redirect(file.storage_url)
 }
